@@ -2,7 +2,7 @@ import UIKit
 import AVFoundation
 
 /// 使用ShazamManager封装类的ViewController示例
-class ViewControllerWithShazamManager: UIViewController, ShazamManagerDelegate {
+class ViewControllerWithShazamManager: UIViewController {
 
     // MARK: - 属性
     private let shazamManager = ShazamManager()
@@ -110,7 +110,29 @@ class ViewControllerWithShazamManager: UIViewController, ShazamManagerDelegate {
 
     // MARK: - 设置
     private func setupShazamManager() {
-        shazamManager.delegate = self
+        shazamManager.onMatchFound = { [weak self] result in
+            self?.handleMatchFound(result)
+        }
+        shazamManager.onMatchNotFound = { [weak self] error in
+            self?.clearMusicInfo()
+            print("未识别到音乐")
+        }
+        shazamManager.onStateChanged = { [weak self] state in
+            switch state {
+            case .idle:
+                print("识别状态：空闲")
+            case .listening:
+                print("识别状态：监听中")
+            case .recognizing:
+                print("识别状态：识别中")
+            case .error(let message):
+                print("识别错误：\(message)")
+                self?.showAlert(title: "识别错误", message: message)
+            }
+        }
+        shazamManager.onError = { [weak self] error in
+            self?.showAlert(title: "错误", message: error.localizedDescription)
+        }
     }
 
     func setupUI() {
@@ -204,8 +226,8 @@ class ViewControllerWithShazamManager: UIViewController, ShazamManagerDelegate {
         rippleLayer = nil
     }
 
-    // MARK: - ShazamManagerDelegate
-    func shazamManager(_ manager: ShazamManager, didFindMatch result: MusicRecognitionResult) {
+    // MARK: - 处理识别结果
+    private func handleMatchFound(_ result: MusicRecognitionResult) {
         titleLabel.text = "歌名：\(result.title ?? "-")"
         artistLabel.text = "歌手: \(result.artist ?? "-")"
         albumLabel.text = "专辑：\(result.album ?? "-")"
@@ -235,29 +257,6 @@ class ViewControllerWithShazamManager: UIViewController, ShazamManagerDelegate {
         
         videoURLButton.isHidden = result.videoURL == nil
         videoURLButton.accessibilityHint = result.videoURL?.absoluteString
-    }
-
-    func shazamManager(_ manager: ShazamManager, didNotFindMatch error: Error?) {
-        clearMusicInfo()
-        print("未识别到音乐")
-    }
-
-    func shazamManager(_ manager: ShazamManager, didChangeState state: RecognitionState) {
-        switch state {
-        case .idle:
-            print("识别状态：空闲")
-        case .listening:
-            print("识别状态：监听中")
-        case .recognizing:
-            print("识别状态：识别中")
-        case .error(let message):
-            print("识别错误：\(message)")
-            showAlert(title: "识别错误", message: message)
-        }
-    }
-
-    func shazamManager(_ manager: ShazamManager, didEncounterError error: Error) {
-        showAlert(title: "错误", message: error.localizedDescription)
     }
 
     // MARK: - 辅助方法

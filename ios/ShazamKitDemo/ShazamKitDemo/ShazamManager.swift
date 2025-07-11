@@ -1,7 +1,7 @@
-import Foundation
-import UIKit
-import ShazamKit
 import AVFoundation
+import Foundation
+import ShazamKit
+import UIKit
 
 // MARK: - 音乐识别结果模型
 struct MusicRecognitionResult {
@@ -14,7 +14,7 @@ struct MusicRecognitionResult {
     let webURL: URL?
     let appleMusicURL: URL?
     let videoURL: URL?
-    
+
     init(from mediaItem: SHMediaItem) {
         self.title = mediaItem.title
         self.artist = mediaItem.artist
@@ -26,6 +26,23 @@ struct MusicRecognitionResult {
         self.appleMusicURL = mediaItem.appleMusicURL
         self.videoURL = mediaItem.videoURL
     }
+
+    func toJSON() -> [String: Any] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        var json: [String: Any] = [:]
+        json["title"] = title ?? ""
+        json["artist"] = artist ?? ""
+        json["album"] = album ?? ""
+        json["genres"] = genres.isEmpty ? [] : genres
+        json["releaseDate"] = releaseDate.map { dateFormatter.string(from: $0) } ?? ""
+        json["artworkURL"] = artworkURL?.absoluteString ?? ""
+        json["webURL"] = webURL?.absoluteString ?? ""
+        json["appleMusicURL"] = appleMusicURL?.absoluteString ?? ""
+        json["videoURL"] = videoURL?.absoluteString ?? ""
+        return json
+    }
 }
 
 // MARK: - 识别状态枚举
@@ -34,7 +51,7 @@ enum RecognitionState: Equatable {
     case listening
     case recognizing
     case error(String)
-    
+
     // 自定义Equatable实现，因为error case包含关联值
     static func == (lhs: RecognitionState, rhs: RecognitionState) -> Bool {
         switch (lhs, rhs) {
@@ -52,39 +69,35 @@ enum RecognitionState: Equatable {
     }
 }
 
-// MARK: - 代理协议
-protocol ShazamManagerDelegate: AnyObject {
-    func shazamManager(_ manager: ShazamManager, didFindMatch result: MusicRecognitionResult)
-    func shazamManager(_ manager: ShazamManager, didNotFindMatch error: Error?)
-    func shazamManager(_ manager: ShazamManager, didChangeState state: RecognitionState)
-    func shazamManager(_ manager: ShazamManager, didEncounterError error: Error)
-}
-
 // MARK: - ShazamKit 管理器
 class ShazamManager: NSObject {
-    
+
+    // MARK: - 闭包回调
+    var onMatchFound: ((MusicRecognitionResult) -> Void)?
+    var onMatchNotFound: ((Error?) -> Void)?
+    var onStateChanged: ((RecognitionState) -> Void)?
+    var onError: ((Error) -> Void)?
+
     // MARK: - 属性
-    weak var delegate: ShazamManagerDelegate?
-    
     private let audioEngine = AVAudioEngine()
     private let session = SHSession()
     private var currentState: RecognitionState = .idle {
         didSet {
-            delegate?.shazamManager(self, didChangeState: currentState)
+            onStateChanged?(currentState)
         }
     }
-    
+
     // MARK: - 初始化
     override init() {
         super.init()
         setupSession()
     }
-    
+
     // MARK: - 设置
     private func setupSession() {
         session.delegate = self
     }
-    
+
     // MARK: - 权限检查
     func checkMicrophonePermission(completion: @escaping (Bool) -> Void) {
         switch AVAudioSession.sharedInstance().recordPermission {
@@ -102,33 +115,37 @@ class ShazamManager: NSObject {
             completion(false)
         }
     }
-    
+
     // MARK: - 音频会话配置
     func setupAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setCategory(
+            .playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
     }
-    
+
     // MARK: - 开始识别
     func startRecognition() {
         if currentState != .idle {
             print("识别已在进行中")
             return
         }
-        
+
         checkMicrophonePermission { [weak self] granted in
             guard let self = self else { return }
-            
+
             if granted {
                 self.performStartRecognition()
             } else {
                 self.currentState = .error("麦克风权限被拒绝")
-                self.delegate?.shazamManager(self, didEncounterError: NSError(domain: "ShazamManager", code: 1001, userInfo: [NSLocalizedDescriptionKey: "麦克风权限被拒绝"]))
+                let error = NSError(
+                    domain: "ShazamManager", code: 1001,
+                    userInfo: [NSLocalizedDescriptionKey: "麦克风权限被拒绝"])
+                self.onError?(error)
             }
         }
     }
-    
+
     private func performStartRecognition() {
         do {
             try setupAudioSession()
@@ -138,35 +155,36 @@ class ShazamManager: NSObject {
             currentState = .listening
         } catch {
             currentState = .error("启动音频引擎失败")
-            delegate?.shazamManager(self, didEncounterError: error)
+            onError?(error)
         }
     }
-    
+
     // MARK: - 停止识别
     func stopRecognition() {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         currentState = .idle
     }
-    
+
     // MARK: - 音频设置
     private func setupAudioTap() {
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        
+
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, time in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
+            [weak self] buffer, time in
             guard let self = self else { return }
             self.currentState = .recognizing
             self.session.matchStreamingBuffer(buffer, at: nil)
         }
     }
-    
+
     // MARK: - 获取当前状态
     var isListening: Bool {
         return currentState == .listening || currentState == .recognizing
     }
-    
+
     var state: RecognitionState {
         return currentState
     }
@@ -174,38 +192,38 @@ class ShazamManager: NSObject {
 
 // MARK: - SHSessionDelegate
 extension ShazamManager: SHSessionDelegate {
-    
+
     func session(_ session: SHSession, didFind match: SHMatch) {
         guard let mediaItem = match.mediaItems.first else {
-            delegate?.shazamManager(self, didNotFindMatch: nil)
+            onMatchNotFound?(nil)
             return
         }
-        
+
         let result = MusicRecognitionResult(from: mediaItem)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.delegate?.shazamManager(self, didFindMatch: result)
+            self.onMatchFound?(result)
         }
     }
-    
+
     func session(_ session: SHSession, didNotFindMatchFor signature: SHSignature, error: Error?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.delegate?.shazamManager(self, didNotFindMatch: error)
+            self.onMatchNotFound?(error)
         }
     }
 }
 
 // MARK: - 扩展功能
 extension ShazamManager {
-    
+
     /// 打开音乐链接
     func openMusicURL(_ url: URL) {
         if UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
-    
+
     /// 获取专辑封面图片
     func loadArtworkImage(from url: URL, completion: @escaping (UIImage?) -> Void) {
         DispatchQueue.global().async {
@@ -220,11 +238,11 @@ extension ShazamManager {
             }
         }
     }
-    
+
     /// 格式化发行日期
     func formatReleaseDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
-} 
+}
