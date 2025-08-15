@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Portuguese */
+
+// Processing states
+"processing.title" = "Processando arquivos...";
+"processing.description" = "Aguarde, salvando arquivos...";
+
+// Success states
+"success.title" = "Arquivos processados";
+"success.description" = "Os arquivos foram salvos no HT Offline Music\nVocê pode alternar para o aplicativo para visualizá-los";
+
+// Error states
+"error.title" = "Falha no processamento";
+"error.no.files" = "Nenhum arquivo encontrado para processar";
+"error.no.audio.video" = "Nenhum arquivo de áudio ou vídeo encontrado";
+
+// Button
+"button.open.app" = "Abrir HT Offline Music";

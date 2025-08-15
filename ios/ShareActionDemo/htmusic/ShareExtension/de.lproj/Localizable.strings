@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - German */
+
+// Processing states
+"processing.title" = "Dateien werden verarbeitet...";
+"processing.description" = "Bitte warten, Dateien werden gespeichert...";
+
+// Success states
+"success.title" = "Dateien verarbeitet";
+"success.description" = "Dateien wurden in HT Offline Music gespeichert\nSie können zur App wechseln, um sie anzuzeigen";
+
+// Error states
+"error.title" = "Verarbeitung fehlgeschlagen";
+"error.no.files" = "Keine Dateien zum Verarbeiten gefunden";
+"error.no.audio.video" = "Keine Audio- oder Videodateien gefunden";
+
+// Button
+"button.open.app" = "HT Offline Music öffnen";

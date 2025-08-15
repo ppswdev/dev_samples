@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Japanese */
+
+// Processing states
+"processing.title" = "ファイルを処理中...";
+"processing.description" = "お待ちください、ファイルを保存中...";
+
+// Success states
+"success.title" = "ファイル処理完了";
+"success.description" = "ファイルがHT Offline Musicに保存されました\nアプリに切り替えてご確認ください";
+
+// Error states
+"error.title" = "処理に失敗しました";
+"error.no.files" = "処理するファイルが見つかりません";
+"error.no.audio.video" = "音声または動画ファイルが見つかりません";
+
+// Button
+"button.open.app" = "HT Offline Musicを開く";

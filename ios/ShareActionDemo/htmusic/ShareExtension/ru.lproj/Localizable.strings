@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Russian */
+
+// Processing states
+"processing.title" = "Обработка файлов...";
+"processing.description" = "Пожалуйста, подождите, сохранение файлов...";
+
+// Success states
+"success.title" = "Файлы обработаны";
+"success.description" = "Файлы сохранены в HT Offline Music\nВы можете переключиться в приложение для просмотра";
+
+// Error states
+"error.title" = "Ошибка обработки";
+"error.no.files" = "Файлы для обработки не найдены";
+"error.no.audio.video" = "Аудио или видео файлы не найдены";
+
+// Button
+"button.open.app" = "Открыть HT Offline Music";

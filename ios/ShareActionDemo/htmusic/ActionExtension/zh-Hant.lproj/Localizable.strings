@@ -1,0 +1,17 @@
+/* ActionExtension 本地化字符串 - 繁體中文 */
+
+// 處理狀態
+"processing.title" = "正在處理檔案...";
+"processing.description" = "請稍候，正在儲存檔案...";
+
+// 成功狀態
+"success.title" = "檔案處理完成";
+"success.description" = "檔案已儲存到HT Offline Music\n您可以切換到應用程式查看";
+
+// 錯誤狀態
+"error.title" = "處理失敗";
+"error.no.files" = "沒有找到可處理的檔案";
+"error.no.audio.video" = "沒有找到音訊或視訊檔案";
+
+// 按鈕
+"button.open.app" = "開啟HT Offline Music";

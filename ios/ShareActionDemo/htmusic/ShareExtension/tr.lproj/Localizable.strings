@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Turkish */
+
+// Processing states
+"processing.title" = "Dosyalar işleniyor...";
+"processing.description" = "Lütfen bekleyin, dosyalar kaydediliyor...";
+
+// Success states
+"success.title" = "Dosyalar işlendi";
+"success.description" = "Dosyalar HT Offline Music'e kaydedildi\nBunları görmek için uygulamaya geçebilirsiniz";
+
+// Error states
+"error.title" = "İşleme başarısız";
+"error.no.files" = "İşlenecek dosya bulunamadı";
+"error.no.audio.video" = "Ses veya video dosyası bulunamadı";
+
+// Button
+"button.open.app" = "HT Offline Music'i Aç";

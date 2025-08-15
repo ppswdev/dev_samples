@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - Italian */
+
+// Processing states
+"processing.title" = "Elaborazione file...";
+"processing.description" = "Attendere, salvataggio file...";
+
+// Success states
+"success.title" = "File elaborati";
+"success.description" = "I file sono stati salvati in HT Offline Music\nPuoi passare all'app per visualizzarli";
+
+// Error states
+"error.title" = "Elaborazione fallita";
+"error.no.files" = "Nessun file trovato da elaborare";
+"error.no.audio.video" = "Nessun file audio o video trovato";
+
+// Button
+"button.open.app" = "Apri HT Offline Music";

@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - English */
+
+// Processing states
+"processing.title" = "Processing Files...";
+"processing.description" = "Please wait, saving files...";
+
+// Success states
+"success.title" = "Files Processed";
+"success.description" = "Files have been saved to HT Offline Music\nYou can switch to the app to view them";
+
+// Error states
+"error.title" = "Processing Failed";
+"error.no.files" = "No files found to process";
+"error.no.audio.video" = "No audio or video files found";
+
+// Button
+"button.open.app" = "Open HT Offline Music";

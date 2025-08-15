@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - Thai */
+
+// Processing states
+"processing.title" = "กำลังประมวลผลไฟล์...";
+"processing.description" = "กรุณารอสักครู่ กำลังบันทึกไฟล์...";
+
+// Success states
+"success.title" = "ประมวลผลไฟล์เสร็จสิ้น";
+"success.description" = "ไฟล์ถูกบันทึกใน HT Offline Music แล้ว\nคุณสามารถสลับไปยังแอปเพื่อดูได้";
+
+// Error states
+"error.title" = "การประมวลผลล้มเหลว";
+"error.no.files" = "ไม่พบไฟล์สำหรับประมวลผล";
+"error.no.audio.video" = "ไม่พบไฟล์เสียงหรือวิดีโอ";
+
+// Button
+"button.open.app" = "เปิด HT Offline Music";

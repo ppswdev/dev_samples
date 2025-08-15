@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - Polish */
+
+// Processing states
+"processing.title" = "Przetwarzanie plików...";
+"processing.description" = "Proszę czekać, zapisywanie plików...";
+
+// Success states
+"success.title" = "Pliki przetworzone";
+"success.description" = "Pliki zostały zapisane w HT Offline Music\nMożesz przełączyć się do aplikacji, aby je zobaczyć";
+
+// Error states
+"error.title" = "Przetwarzanie nie powiodło się";
+"error.no.files" = "Nie znaleziono plików do przetworzenia";
+"error.no.audio.video" = "Nie znaleziono plików audio lub wideo";
+
+// Button
+"button.open.app" = "Otwórz HT Offline Music";

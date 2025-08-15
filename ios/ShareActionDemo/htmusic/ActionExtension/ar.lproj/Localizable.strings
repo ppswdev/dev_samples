@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - Arabic */
+
+// Processing states
+"processing.title" = "معالجة الملفات...";
+"processing.description" = "يرجى الانتظار، حفظ الملفات...";
+
+// Success states
+"success.title" = "تمت معالجة الملفات";
+"success.description" = "تم حفظ الملفات في HT Offline Music\nيمكنك التبديل إلى التطبيق لعرضها";
+
+// Error states
+"error.title" = "فشل في المعالجة";
+"error.no.files" = "لم يتم العثور على ملفات للمعالجة";
+"error.no.audio.video" = "لم يتم العثور على ملفات صوت أو فيديو";
+
+// Button
+"button.open.app" = "فتح HT Offline Music";

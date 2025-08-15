@@ -1,0 +1,17 @@
+/* ActionExtension Localizable Strings - Vietnamese */
+
+// Processing states
+"processing.title" = "Đang xử lý tệp...";
+"processing.description" = "Vui lòng chờ, đang lưu tệp...";
+
+// Success states
+"success.title" = "Đã xử lý tệp";
+"success.description" = "Tệp đã được lưu vào HT Offline Music\nBạn có thể chuyển sang ứng dụng để xem";
+
+// Error states
+"error.title" = "Xử lý thất bại";
+"error.no.files" = "Không tìm thấy tệp để xử lý";
+"error.no.audio.video" = "Không tìm thấy tệp âm thanh hoặc video";
+
+// Button
+"button.open.app" = "Mở HT Offline Music";

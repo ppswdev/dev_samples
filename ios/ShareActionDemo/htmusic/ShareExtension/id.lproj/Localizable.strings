@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Indonesian */
+
+// Processing states
+"processing.title" = "Memproses file...";
+"processing.description" = "Harap tunggu, menyimpan file...";
+
+// Success states
+"success.title" = "File diproses";
+"success.description" = "File telah disimpan ke HT Offline Music\nAnda dapat beralih ke aplikasi untuk melihatnya";
+
+// Error states
+"error.title" = "Pemrosesan gagal";
+"error.no.files" = "Tidak ada file yang ditemukan untuk diproses";
+"error.no.audio.video" = "Tidak ada file audio atau video yang ditemukan";
+
+// Button
+"button.open.app" = "Buka HT Offline Music";

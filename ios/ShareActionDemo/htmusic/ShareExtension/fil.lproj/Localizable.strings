@@ -1,0 +1,17 @@
+/* ShareExtension Localizable Strings - Filipino */
+
+// Processing states
+"processing.title" = "Pinoproseso ang mga file...";
+"processing.description" = "Mangyaring maghintay, ini-save ang mga file...";
+
+// Success states
+"success.title" = "Na-proseso ang mga file";
+"success.description" = "Na-save ang mga file sa HT Offline Music\nMaaari kang lumipat sa app para makita ang mga ito";
+
+// Error states
+"error.title" = "Nabigo ang pagproseso";
+"error.no.files" = "Walang nahanap na file para i-proseso";
+"error.no.audio.video" = "Walang nahanap na audio o video file";
+
+// Button
+"button.open.app" = "Buksan ang HT Offline Music";
