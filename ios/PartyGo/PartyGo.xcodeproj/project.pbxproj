@@ -29,9 +29,22 @@
 		B2DC6DCD2E52CDB70082AB74 /* PartyGoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PartyGoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B2DC6FB92E532F320082AB74 /* Exceptions for "PartyGo" folder in "PartyGo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B2DC6DB32E52CDB50082AB74 /* PartyGo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B2DC6DB62E52CDB50082AB74 /* PartyGo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B2DC6FB92E532F320082AB74 /* Exceptions for "PartyGo" folder in "PartyGo" target */,
+			);
 			path = PartyGo;
 			sourceTree = "<group>";
 		};
@@ -399,6 +412,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PartyGo/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleTypeRole = Editor;\n    CFBundleURLSchemes =     (\n        partygo\n    );\n}";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
@@ -429,6 +443,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PartyGo/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleTypeRole = Editor;\n    CFBundleURLSchemes =     (\n        partygo\n    );\n}";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;

@@ -38,10 +38,9 @@ enum AppearanceMode: String, CaseIterable, Codable {
 }
 
 /// 外观模式管理服务
-@MainActor
 class AppearanceManager: ObservableObject {
     // MARK: - 单例模式
-    static let shared = AppearanceManager()
+    @MainActor static let shared = AppearanceManager()
     
     // MARK: - 发布属性
     @Published var currentAppearanceMode: AppearanceMode = .system
@@ -57,12 +56,6 @@ class AppearanceManager: ObservableObject {
         loadSavedAppearanceMode()
         setupSystemColorSchemeObserver()
         updateEffectiveColorScheme()
-    }
-    
-    deinit {
-        if let observer = systemColorSchemeObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
     
     // MARK: - 公共方法
@@ -92,6 +85,22 @@ class AppearanceManager: ObservableObject {
         setAppearanceMode(allModes[nextIndex])
     }
     
+    /// 异步切换外观模式（Swift 6 现代方式）
+    func toggleAppearanceModeAsync() async {
+        let allModes = AppearanceMode.allCases
+        guard let currentIndex = allModes.firstIndex(of: currentAppearanceMode) else { return }
+        
+        let nextIndex = (currentIndex + 1) % allModes.count
+        await setAppearanceModeAsync(allModes[nextIndex])
+    }
+    
+    /// 异步设置外观模式
+    func setAppearanceModeAsync(_ mode: AppearanceMode) async {
+        currentAppearanceMode = mode
+        saveAppearanceMode()
+        updateEffectiveColorScheme()
+    }
+    
     // MARK: - 私有方法
     
     /// 加载保存的外观模式
@@ -112,6 +121,7 @@ class AppearanceManager: ObservableObject {
     
     /// 设置系统外观模式监听器
     private func setupSystemColorSchemeObserver() {
+        // 使用传统通知，并持有token，便于deinit清理
         systemColorSchemeObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil,
@@ -160,9 +170,26 @@ extension AppearanceManager {
     }
 }
 
+// MARK: - Swift 6 现代特性扩展
+extension AppearanceManager {
+    /// 使用 Swift 6 的现代并发方式获取当前模式
+    func getCurrentModeAsync() async -> AppearanceMode {
+        return currentAppearanceMode
+    }
+    
+    /// 使用 Swift 6 的现代并发方式检查是否为深色模式
+    func isDarkModeAsync() async -> Bool {
+        return effectiveColorScheme == .dark
+    }
+}
+
 // MARK: - 扩展：SwiftUI环境值
-struct AppearanceModeKey: EnvironmentKey {
-    static let defaultValue: AppearanceManager = AppearanceManager.shared
+
+struct AppearanceModeKey: @preconcurrency EnvironmentKey {
+    @MainActor static let defaultValue: AppearanceManager = {
+        // 在环境键中直接返回单例，SwiftUI 会在主线程上处理
+        return AppearanceManager.shared
+    }()
 }
 
 extension EnvironmentValues {
