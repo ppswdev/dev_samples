@@ -12,7 +12,6 @@ import SwiftData
 struct PartyGoApp: App {
     // MARK: - 状态管理
     @StateObject private var appInitService = AppInitService.shared
-    @StateObject private var appearanceManager = AppearanceManager.shared
     @State private var isLaunching = true
     
     // MARK: - SwiftData配置
@@ -46,15 +45,15 @@ struct PartyGoApp: App {
                         .zIndex(1)
                 } else {
                     // 主界面
-                    ContentView()
+                    ExamplesIndexView()
+                    //RootView()
                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                         .zIndex(0)
                 }
             }
             .animation(.easeInOut(duration: 0.8), value: isLaunching)
-            .preferredColorScheme(appearanceManager.effectiveColorScheme) // 动态外观模式
+            .preferredColorScheme(.dark) // 动态外观模式
             .environment(\.locale, .init(identifier: "zh_CN")) // 中文本地化
-            .environment(\.appearanceManager, appearanceManager) // 注入外观管理器
             .onAppear {
                 startAppInitialization()
             }

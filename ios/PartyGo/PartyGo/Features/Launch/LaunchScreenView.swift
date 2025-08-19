@@ -69,7 +69,7 @@ struct LaunchScreenView: View {
                     }
                     
                     // App名称
-                    Text("PartyGo")
+                    Text("SwiftUI App")
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .opacity(textOpacity)
