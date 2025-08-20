@@ -37,24 +37,24 @@ extension View {
     
     // MARK: - Color Modifiers
     func primaryTextColor() -> some View {
-        self.foregroundColor(.text)
+        self.foregroundColor(.myTextPrimary)
     }
     
     func secondaryTextColor() -> some View {
-        self.foregroundColor(.textSecondary)
+        self.foregroundColor(.myTextSecondary)
     }
     
     func placeholderTextColor() -> some View {
-        self.foregroundColor(.textPlaceholder)
+        self.foregroundColor(.myPlaceholder)
     }
     
     // MARK: - Background Modifiers
     func primaryBackground() -> some View {
-        self.background(.backgroundMain)
+        self.background(.myBackground)
     }
     
     func cardBackground() -> some View {
-        self.background(.card)
+        self.background(.myCardBackground)
     }
     
     // MARK: - Conditional Modifiers

@@ -21,14 +21,14 @@ extension View {
     func cardStyle() -> some View {
         self
             .padding(AppConstants.UI.padding)
-            .background(.card)
+            .background(.myCardBackground)
             .cornerRadius(AppConstants.UI.cornerRadius)
             .overlay(
                 RoundedRectangle(cornerRadius: AppConstants.UI.cornerRadius)
-                    .stroke(.border, lineWidth: AppConstants.UI.borderWidth)
+                    .stroke(.myBorder, lineWidth: AppConstants.UI.borderWidth)
             )
             .shadow(
-                color: .shadow,
+                color: .myShadow,
                 radius: AppConstants.UI.shadowRadius,
                 x: 0,
                 y: 2
@@ -58,7 +58,7 @@ extension View {
         self
             .foregroundColor(.white)
             .padding(AppConstants.UI.padding)
-            .background(.success)
+            .background(.mySuccess)
             .cornerRadius(AppConstants.UI.cornerRadius)
     }
     
@@ -67,7 +67,7 @@ extension View {
         self
             .foregroundColor(.white)
             .padding(AppConstants.UI.padding)
-            .background(.error)
+            .background(.myError)
             .cornerRadius(AppConstants.UI.cornerRadius)
     }
     
@@ -76,7 +76,7 @@ extension View {
         self
             .foregroundColor(.white)
             .padding(AppConstants.UI.padding)
-            .background(.warning)
+            .background(.myWarning)
             .cornerRadius(AppConstants.UI.cornerRadius)
     }
     
@@ -85,7 +85,7 @@ extension View {
         self
             .foregroundColor(.white)
             .padding(AppConstants.UI.padding)
-            .background(.info)
+            .background(.myInfo)
             .cornerRadius(AppConstants.UI.cornerRadius)
     }
 }

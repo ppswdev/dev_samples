@@ -45,8 +45,7 @@ struct PartyGoApp: App {
                         .zIndex(1)
                 } else {
                     // 主界面
-                    ExamplesIndexView()
-                    //RootView()
+                    ExampleRootView()
                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                         .zIndex(0)
                 }

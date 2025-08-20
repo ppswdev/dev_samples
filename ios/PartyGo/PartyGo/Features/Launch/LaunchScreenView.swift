@@ -39,7 +39,7 @@ struct LaunchScreenView: View {
         ZStack {
             // MARK: - 背景设计
             // 使用与静态启动屏幕一致的背景
-            Color(.backgroundMain)
+            Color(.myBackground)
                 .ignoresSafeArea()
             
             // MARK: - 主要内容区域
