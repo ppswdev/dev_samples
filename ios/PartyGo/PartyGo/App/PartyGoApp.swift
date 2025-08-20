@@ -41,16 +41,16 @@ struct PartyGoApp: App {
                 if isLaunching {
                     // 动态启动页面
                     LaunchScreenView()
-                        .transition(.opacity.combined(with: .scale))
+                        .transition(.opacity)
                         .zIndex(1)
                 } else {
                     // 主界面
                     ExampleRootView()
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                        .transition(.opacity)
                         .zIndex(0)
                 }
             }
-            .animation(.easeInOut(duration: 0.8), value: isLaunching)
+            .animation(.easeInOut(duration: 1.2), value: isLaunching)
             .preferredColorScheme(.dark) // 动态外观模式
             .environment(\.locale, .init(identifier: "zh_CN")) // 中文本地化
             .onAppear {
@@ -77,7 +77,7 @@ struct PartyGoApp: App {
             await appInitService.initializeApp()
         }
         
-        // 确保启动页面至少显示2.5秒，提供良好的用户体验
+        // 确保启动页面至少显示3秒，提供良好的用户体验
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             // 如果初始化还没完成，等待初始化完成
             if !appInitService.isInitialized {
@@ -95,7 +95,7 @@ struct PartyGoApp: App {
      * 使用动画效果平滑过渡到主界面
      */
     private func switchToMainInterface() {
-        withAnimation(.easeInOut(duration: 0.8)) {
+        withAnimation(.easeInOut(duration: 1.2)) {
             isLaunching = false
         }
     }

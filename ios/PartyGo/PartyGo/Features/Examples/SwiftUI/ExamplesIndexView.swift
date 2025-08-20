@@ -78,7 +78,7 @@ struct ExamplesIndexView: View {
                     NavigationLink("自定义主题", destination: CustomThemeExampleView())
                     NavigationLink("动态颜色", destination: DynamicColorExampleView())
                     NavigationLink("我的主题", destination: MyThemeColorsExampleView())
-                    //NavigationLink("渐变主题", destination: GradientThemeExampleView())
+                    NavigationLink("弥散光渐变主题", destination: GradientThemeExampleView())
                 }
                 
                 // 错误处理和调试
