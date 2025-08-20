@@ -15,6 +15,7 @@ import SwiftData
  * - 管理应用启动时的初始化流程
  * - 处理数据预加载和配置设置
  * - 提供启动状态通知
+ * - 网络连接检测和管理
  * 
  * 初始化流程:
  * 1. 基础配置初始化
@@ -187,9 +188,16 @@ class AppInitService: ObservableObject {
      * 检查网络连接
      */
     private func checkNetworkConnection() async throws {
-        // 检查网络连接状态
-        // 在实际项目中，这里会进行真实的网络检查
-        print("🌐 PartyGo App - 网络连接检查完成")
+        // 使用NetworkService检查网络连接
+        let isConnected = await NetworkService.shared.checkNetworkConnection()
+        
+        if isConnected {
+            print("🌐 PartyGo App - 网络连接检查完成")
+        } else {
+            print("❌ PartyGo App - 网络连接不可用")
+            // 注意：这里不抛出错误，允许应用在没有网络的情况下继续运行
+            // 但会设置网络状态为不可用
+        }
     }
     
     /**
