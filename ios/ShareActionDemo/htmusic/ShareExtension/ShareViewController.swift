@@ -225,25 +225,32 @@ class ShareViewController: UIViewController {
     }
     
     func openMainApp() {
-        // 使用URL Scheme打开主应用htofflinemusic://share
+        // 使用URL Scheme打开主应用
         if let url = URL(string: "htofflinemusic://share") {
             print("ShareExtension: 尝试打开URL: \(url)")
             
-            // 在ShareExtension中使用正确的方式打开宿主App
-            var responder = self as UIResponder?
-            while responder != nil {
-                if let application = responder as? UIApplication {
-                    print("ShareExtension: 找到UIApplication，执行openURL")
-                    application.perform(NSSelectorFromString("openURL:"), with: url)
-                    break
+            // 先完成请求
+            extensionContext?.completeRequest(returningItems: [], completionHandler: { _ in
+                // 延迟后尝试打开应用
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    // 使用更稳定的私有API方法
+                    if let applicationClass = NSClassFromString("UIApplication") as? NSObject.Type {
+                        if let sharedApplication = applicationClass.value(forKey: "sharedApplication") as? UIApplication {
+                            print("ShareExtension: 找到UIApplication，执行openURL")
+                            sharedApplication.open(url, options: [:], completionHandler: { success in
+                                print("ShareExtension: 打开应用结果: \(success)")
+                            })
+                        } else {
+                            print("ShareExtension: 无法获取sharedApplication")
+                        }
+                    } else {
+                        print("ShareExtension: 无法找到UIApplication类")
+                    }
                 }
-                responder = responder?.next
-            }
-        }
-        
-        // 延迟完成ShareExtension请求，给用户时间看到成功界面
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            })
+        } else {
+            print("ShareExtension: URL创建失败")
+            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
         }
     }
 }
