@@ -28,7 +28,7 @@ struct ExamplesIndexView: View {
                     NavigationLink("Spacer", destination: SpacerExampleView())
                     NavigationLink("Color", destination: ColorExampleView())
                 }
-                
+
                 // 导航路由
                 Section("Navigation: 导航路由") {
                     NavigationLink("NavigationView", destination: NavigationExampleView())

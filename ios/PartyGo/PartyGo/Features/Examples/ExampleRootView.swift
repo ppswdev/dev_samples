@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct ExampleRootView: View {
+    @AppStorage("isFirstLaunch") private var isFirstLaunch = true
+    @AppStorage("isVip") private var isVip = false
+
     var body: some View {
         TabView {
             // 第一个标签页
@@ -59,6 +62,13 @@ struct ExampleRootView: View {
             }
         }
         .navigationTitle("SwiftUI+Swift6")
+        .onAppear {
+            // 当进入首页时，设置首次启动为 false
+            print("✅ ExampleRootView - 当前是会员状态: \(isVip)")
+            print("✅ ExampleRootView - 设置首次启动状态为 false")
+//            isFirstLaunch = true
+//            isVip = false
+        }
     }
 }
 

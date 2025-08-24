@@ -150,7 +150,7 @@ class AppInitService: ObservableObject {
         UserDefaults.standard.set(true, forKey: "app_initialized")
         
         // 配置日志系统
-        print("📱 PartyGo App - 基础配置初始化完成")
+        print("📱 AppInit - 基础配置初始化完成")
         
         // 模拟可能的错误
         if Bool.random() && false { // 设置为false避免随机错误
@@ -164,7 +164,7 @@ class AppInitService: ObservableObject {
     private func prepareDataModel() async throws {
         // 检查SwiftData模型
         // 在实际项目中，这里会进行数据模型验证
-        print("📊 PartyGo App - 数据模型准备完成")
+        print("📊 AppInit - 数据模型准备完成")
     }
     
     /**
@@ -178,9 +178,9 @@ class AppInitService: ObservableObject {
         if !hasUserData {
             // 创建默认用户数据
             UserDefaults.standard.set(true, forKey: "has_user_data")
-            print("👤 PartyGo App - 创建默认用户数据")
+            print("👤 AppInit - 创建默认用户数据")
         } else {
-            print("👤 PartyGo App - 用户数据加载完成")
+            print("👤 AppInit - 用户数据加载完成")
         }
     }
     
@@ -192,9 +192,9 @@ class AppInitService: ObservableObject {
         let isConnected = await NetworkService.shared.checkNetworkConnection()
         
         if isConnected {
-            print("🌐 PartyGo App - 网络连接检查完成")
+            print("🌐 AppInit - 网络连接检查完成")
         } else {
-            print("❌ PartyGo App - 网络连接不可用")
+            print("❌ AppInit - 网络连接不可用")
             // 注意：这里不抛出错误，允许应用在没有网络的情况下继续运行
             // 但会设置网络状态为不可用
         }
@@ -206,7 +206,7 @@ class AppInitService: ObservableObject {
     private func prepareUIResources() async throws {
         // 预加载图片资源
         // 准备动画资源
-        print("🎨 PartyGo App - UI资源准备完成")
+        print("🎨 AppInit - UI资源准备完成")
     }
     
     /**
@@ -217,7 +217,7 @@ class AppInitService: ObservableObject {
         currentStep = "启动完成"
         initializationProgress = 1.0
         
-        print("✅ PartyGo App - 初始化完成")
+        print("✅ AppInit - 初始化完成")
         
         // 发送初始化完成通知
         NotificationCenter.default.post(name: .appInitialized, object: nil)
@@ -228,7 +228,7 @@ class AppInitService: ObservableObject {
      */
     private func handleInitializationError(_ error: Error) async {
         errorMessage = error.localizedDescription
-        print("❌ PartyGo App - 初始化失败: \(error)")
+        print("❌ AppInit - 初始化失败: \(error)")
     }
     
     /**
