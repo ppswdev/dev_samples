@@ -39,6 +39,8 @@ class GlobalStateManager: ObservableObject {
     @AppStorage("appVersion") var appVersion: String = ""
     @AppStorage("buildNumber") var buildNumber: String = ""
     @AppStorage("lastUpdateCheck") var lastUpdateCheck: TimeInterval = 0
+    @AppStorage("soundEnabled") var soundEnabled: Bool = true
+    @AppStorage("hapticFeedbackEnabled") var hapticFeedbackEnabled: Bool = true
     
     // MARK: - 网络状态
     @Published var networkStatus: NetworkStatus = .unknown

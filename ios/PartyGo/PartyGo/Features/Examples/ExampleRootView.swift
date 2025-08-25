@@ -45,17 +45,7 @@ struct ExampleRootView: View {
             }
             
             // 第四个标签页
-            VStack(spacing: 20) {
-                Image(systemName: "gear")
-                    .font(.system(size: 50))
-                    .foregroundColor(.purple)
-                
-                Text("设置")
-                    .font(.title)
-                
-                Text("这是第四个标签页的内容")
-                    .foregroundColor(.secondary)
-            }
+            SettingsMainView()
             .tabItem {
                 Image(systemName: "gear")
                 Text("设置")

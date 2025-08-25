@@ -321,6 +321,8 @@ struct OnboardingView: View {
                 Button("继续") {
                     if currentPage == onboardingPages.count - 1 {
                         rootManager.switchToPage(.trial, animated: true)
+                    }else{
+                        currentPage += 1
                     }
                 }
                 .buttonStyle(.borderedProminent)
