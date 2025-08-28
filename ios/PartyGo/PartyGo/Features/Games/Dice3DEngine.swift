@@ -12,22 +12,22 @@ import SwiftUI
 // MARK: - 骰子类型枚举
 enum DiceType: Int, CaseIterable {
     case two = 2      // 2面 - 正反面
+    case four = 4     // 4面 - 三菱椎体
     case six = 6      // 6面 - 正方体
-    case eight = 8    // 8面 - 八面体
     
     var name: String {
         switch self {
         case .two: return "2面骰"
+        case .four: return "4面骰"
         case .six: return "6面骰"
-        case .eight: return "8面骰"
         }
     }
     
     var description: String {
         switch self {
         case .two: return "正反面骰子"
+        case .four: return "三菱椎体骰子"
         case .six: return "正方体骰子"
-        case .eight: return "八面体骰子"
         }
     }
 }
@@ -101,10 +101,10 @@ class Dice3DEngine: NSObject, ObservableObject {
         switch currentDiceType {
         case .two:
             createTwoSidedDice()
+        case .four:
+            createFourSidedDice()
         case .six:
             createSixSidedDice()
-        case .eight:
-            createEightSidedDice()
         }
     }
     
@@ -123,6 +123,28 @@ class Dice3DEngine: NSObject, ObservableObject {
         // 添加数字
         addNumberToFace(node: diceNode, number: 1, position: SCNVector3(0, 0.11, 0), rotation: SCNVector4(0, 0, 0, 1))
         addNumberToFace(node: diceNode, number: 2, position: SCNVector3(0, -0.11, 0), rotation: SCNVector4(0, 0, 1, Float.pi))
+        
+        self.diceNode = diceNode
+        sceneView?.scene?.rootNode.addChildNode(diceNode)
+    }
+    
+    // MARK: - 4面骰子（三菱椎体）
+    private func createFourSidedDice() {
+        let diceNode = SCNNode()
+        
+        // 使用SCNPyramid替代自定义几何体，更稳定
+        let pyramid = SCNPyramid(width: 1.5, height: 1.5, length: 1.5)
+        pyramid.firstMaterial?.diffuse.contents = UIColor.white
+        pyramid.firstMaterial?.specular.contents = UIColor.lightGray
+        
+        let pyramidNode = SCNNode(geometry: pyramid)
+        diceNode.addChildNode(pyramidNode)
+        
+        // 添加数字到每个面
+        addNumberToFace(node: diceNode, number: 1, position: SCNVector3(0, 0.3, 0), rotation: SCNVector4(0, 0, 0, 1))
+        addNumberToFace(node: diceNode, number: 2, position: SCNVector3(-0.3, -0.2, 0), rotation: SCNVector4(0, 0, 1, Float.pi/3))
+        addNumberToFace(node: diceNode, number: 3, position: SCNVector3(0.3, -0.2, 0), rotation: SCNVector4(0, 0, 1, -Float.pi/3))
+        addNumberToFace(node: diceNode, number: 4, position: SCNVector3(0, -0.2, 0.3), rotation: SCNVector4(1, 0, 0, Float.pi/3))
         
         self.diceNode = diceNode
         sceneView?.scene?.rootNode.addChildNode(diceNode)
@@ -147,32 +169,6 @@ class Dice3DEngine: NSObject, ObservableObject {
         addNumberToFace(node: diceNode, number: 4, position: SCNVector3(-1.1, 0, 0), rotation: SCNVector4(0, 0, 1, -Float.pi/2))
         addNumberToFace(node: diceNode, number: 5, position: SCNVector3(0, 0, 1.1), rotation: SCNVector4(1, 0, 0, Float.pi/2))
         addNumberToFace(node: diceNode, number: 6, position: SCNVector3(0, 0, -1.1), rotation: SCNVector4(1, 0, 0, -Float.pi/2))
-        
-        self.diceNode = diceNode
-        sceneView?.scene?.rootNode.addChildNode(diceNode)
-    }
-    
-    // MARK: - 8面骰子（八面体）
-    private func createEightSidedDice() {
-        let diceNode = SCNNode()
-        
-        // 创建八面体
-        let octahedron = SCNPyramid(width: 1.5, height: 1.5, length: 1.5)
-        octahedron.firstMaterial?.diffuse.contents = UIColor.white
-        octahedron.firstMaterial?.specular.contents = UIColor.lightGray
-        
-        let octahedronNode = SCNNode(geometry: octahedron)
-        diceNode.addChildNode(octahedronNode)
-        
-        // 添加数字到每个面
-        addNumberToFace(node: diceNode, number: 1, position: SCNVector3(0, 0.4, 0), rotation: SCNVector4(0, 0, 0, 1))
-        addNumberToFace(node: diceNode, number: 2, position: SCNVector3(0, -0.4, 0), rotation: SCNVector4(0, 0, 1, Float.pi))
-        addNumberToFace(node: diceNode, number: 3, position: SCNVector3(0.4, 0, 0), rotation: SCNVector4(0, 0, 1, Float.pi/2))
-        addNumberToFace(node: diceNode, number: 4, position: SCNVector3(-0.4, 0, 0), rotation: SCNVector4(0, 0, 1, -Float.pi/2))
-        addNumberToFace(node: diceNode, number: 5, position: SCNVector3(0, 0, 0.4), rotation: SCNVector4(1, 0, 0, Float.pi/2))
-        addNumberToFace(node: diceNode, number: 6, position: SCNVector3(0, 0, -0.4), rotation: SCNVector4(1, 0, 0, -Float.pi/2))
-        addNumberToFace(node: diceNode, number: 7, position: SCNVector3(0.3, 0.3, 0.3), rotation: SCNVector4(1, 1, 1, Float.pi/4))
-        addNumberToFace(node: diceNode, number: 8, position: SCNVector3(-0.3, -0.3, -0.3), rotation: SCNVector4(1, 1, 1, -Float.pi/4))
         
         self.diceNode = diceNode
         sceneView?.scene?.rootNode.addChildNode(diceNode)
