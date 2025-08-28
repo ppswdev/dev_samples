@@ -239,6 +239,39 @@ class Dice3DEngine: NSObject, ObservableObject {
         animationDuration = max(0.5, min(5.0, duration))
     }
     
+    // MARK: - 手动控制方法
+    func updateDiceTransform(position: SCNVector3, rotation: SCNVector4, scale: Float) {
+        guard let diceNode = diceNode else { return }
+        
+        diceNode.position = position
+        diceNode.rotation = rotation
+        diceNode.scale = SCNVector3(scale, scale, scale)
+    }
+    
+    func startAutoAnimation(speed: Float) {
+        guard let diceNode = diceNode else { return }
+        
+        let rotationAction = SCNAction.rotateBy(
+            x: CGFloat(Float.pi * 2),
+            y: CGFloat(Float.pi * 2),
+            z: CGFloat(Float.pi * 2),
+            duration: TimeInterval(4.0 / speed)
+        )
+        
+        rotationAction.timingMode = .linear
+        diceNode.runAction(SCNAction.repeatForever(rotationAction), forKey: "autoAnimation")
+    }
+    
+    func stopAutoAnimation() {
+        guard let diceNode = diceNode else { return }
+        diceNode.removeAction(forKey: "autoAnimation")
+    }
+    
+    func updateAutoAnimationSpeed(speed: Float) {
+        stopAutoAnimation()
+        startAutoAnimation(speed: speed)
+    }
+    
     // MARK: - 计算属性
     var rollCount: Int {
         rollHistory.count
