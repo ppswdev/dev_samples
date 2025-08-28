@@ -125,22 +125,20 @@ class RootViewManager: ObservableObject {
      */
     private func handleInitializationComplete() {
         print("✅ RootViewManager - 初始化完成，决定下一步页面")
-        
+        if isVip {
+            // 已有订阅，直接进入首页
+            print("�� RootViewManager - 已有订阅，进入首页")
+            switchToPage(.home)
+            return
+        }
         if isFirstLaunch {
             // 首次运行，进入引导页
             print("�� RootViewManager - 首次运行，进入引导页")
             switchToPage(.onboarding)
         } else {
             // 非首次运行，检查订阅状态
-            if isVip {
-                // 已有订阅，直接进入首页
-                print("�� RootViewManager - 已有订阅，进入首页")
-                switchToPage(.home)
-            } else {
-                // 无订阅，进入订阅页
-                print("�� RootViewManager - 无订阅，进入订阅页")
-                switchToPage(.subscription)
-            }
+            print("�� RootViewManager - 无订阅，进入订阅页")
+            switchToPage(.subscription)
         }
     }
     
@@ -367,7 +365,7 @@ struct OnboardingPageView: View {
  */
 struct TrialView: View {
     @EnvironmentObject var rootManager: RootViewManager
-    @AppStorage("isVip") private var isVip = false
+    @StateObject private var globalState = GlobalStateManager.shared
     
     var body: some View {
         VStack(spacing: 30) {
@@ -387,7 +385,8 @@ struct TrialView: View {
             
             VStack(spacing: 15) {
                 Button("开始试用") {
-                    isVip = true
+                    globalState.isVip = true
+                    globalState.vipExpireDate = Date().addingTimeInterval(3600).timeIntervalSince1970
                     rootManager.switchToPage(.home, animated: true)
                 }
                 .buttonStyle(.borderedProminent)
@@ -407,7 +406,7 @@ struct TrialView: View {
  */
 struct DetainmentView: View {
     @EnvironmentObject var rootManager: RootViewManager
-    @AppStorage("isVip") private var isVip = false
+    @StateObject private var globalState = GlobalStateManager.shared
     
     var body: some View {
         VStack(spacing: 30) {
@@ -432,7 +431,8 @@ struct DetainmentView: View {
                 .buttonStyle(.borderedProminent)
                 
                 Button("订阅成功") {
-                    isVip = true
+                    globalState.isVip = true
+                    globalState.vipExpireDate = Date().addingTimeInterval(3600).timeIntervalSince1970
                     rootManager.switchToPage(.home, animated: true)
                 }
                 .buttonStyle(.bordered)

@@ -65,6 +65,7 @@ struct PartyGoApp: App {
             .environment(\.locale, Locale(identifier: globalState.appLanguage.rawValue))
             .id(globalState.appLanguage.rawValue)
             .onAppear {
+                print("当前是会员状态: \(globalState.isVip)")
                 rootManager.startAppFlow()
             }.onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
                 print("🌐 PartyGo App 接收到网络变化：\(networkService.networkStatus)")

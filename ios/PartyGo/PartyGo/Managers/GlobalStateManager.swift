@@ -59,6 +59,7 @@ class GlobalStateManager: ObservableObject {
     @Published var lastCacheCleanup: Date = Date()
     
     // MARK: - 业务状态
+    @Published var isTabBarVisible: Bool = true
     @Published var currentTab: AppTab = .home
     @Published var unreadMessageCount: Int = 0
     @Published var pendingNotifications: Int = 0

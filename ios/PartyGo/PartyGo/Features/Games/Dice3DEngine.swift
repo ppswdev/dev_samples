@@ -12,13 +12,11 @@ import SwiftUI
 // MARK: - 骰子类型枚举
 enum DiceType: Int, CaseIterable {
     case two = 2      // 2面 - 正反面
-    case four = 4     // 4面 - 三菱椎体
     case six = 6      // 6面 - 正方体
     
     var name: String {
         switch self {
         case .two: return "2面骰"
-        case .four: return "4面骰"
         case .six: return "6面骰"
         }
     }
@@ -26,7 +24,6 @@ enum DiceType: Int, CaseIterable {
     var description: String {
         switch self {
         case .two: return "正反面骰子"
-        case .four: return "三菱椎体骰子"
         case .six: return "正方体骰子"
         }
     }
@@ -101,8 +98,6 @@ class Dice3DEngine: NSObject, ObservableObject {
         switch currentDiceType {
         case .two:
             createTwoSidedDice()
-        case .four:
-            createFourSidedDice()
         case .six:
             createSixSidedDice()
         }
@@ -120,31 +115,9 @@ class Dice3DEngine: NSObject, ObservableObject {
         let cylinderNode = SCNNode(geometry: cylinder)
         diceNode.addChildNode(cylinderNode)
         
-        // 添加数字
+        // 添加数字到面上
         addNumberToFace(node: diceNode, number: 1, position: SCNVector3(0, 0.11, 0), rotation: SCNVector4(0, 0, 0, 1))
         addNumberToFace(node: diceNode, number: 2, position: SCNVector3(0, -0.11, 0), rotation: SCNVector4(0, 0, 1, Float.pi))
-        
-        self.diceNode = diceNode
-        sceneView?.scene?.rootNode.addChildNode(diceNode)
-    }
-    
-    // MARK: - 4面骰子（三菱椎体）
-    private func createFourSidedDice() {
-        let diceNode = SCNNode()
-        
-        // 使用SCNPyramid替代自定义几何体，更稳定
-        let pyramid = SCNPyramid(width: 1.5, height: 1.5, length: 1.5)
-        pyramid.firstMaterial?.diffuse.contents = UIColor.white
-        pyramid.firstMaterial?.specular.contents = UIColor.lightGray
-        
-        let pyramidNode = SCNNode(geometry: pyramid)
-        diceNode.addChildNode(pyramidNode)
-        
-        // 添加数字到每个面
-        addNumberToFace(node: diceNode, number: 1, position: SCNVector3(0, 0.3, 0), rotation: SCNVector4(0, 0, 0, 1))
-        addNumberToFace(node: diceNode, number: 2, position: SCNVector3(-0.3, -0.2, 0), rotation: SCNVector4(0, 0, 1, Float.pi/3))
-        addNumberToFace(node: diceNode, number: 3, position: SCNVector3(0.3, -0.2, 0), rotation: SCNVector4(0, 0, 1, -Float.pi/3))
-        addNumberToFace(node: diceNode, number: 4, position: SCNVector3(0, -0.2, 0.3), rotation: SCNVector4(1, 0, 0, Float.pi/3))
         
         self.diceNode = diceNode
         sceneView?.scene?.rootNode.addChildNode(diceNode)
@@ -179,7 +152,8 @@ class Dice3DEngine: NSObject, ObservableObject {
         // 使用更安全的文本创建方式
         let textGeometry = SCNText(string: "\(number)", extrusionDepth: 0.05)
         textGeometry.font = UIFont.systemFont(ofSize: 0.3, weight: .bold)
-        textGeometry.firstMaterial?.diffuse.contents = UIColor.black
+        textGeometry.firstMaterial?.diffuse.contents = UIColor.white
+        textGeometry.firstMaterial?.specular.contents = UIColor.white
         
         let textNode = SCNNode(geometry: textGeometry)
         textNode.position = position
