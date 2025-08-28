@@ -22,6 +22,7 @@ struct PrivacyPolicyView: View {
         }
         .navigationTitle("隐私政策")
         .navigationBarTitleDisplayMode(.inline)
+        .hideTabBar()
     }
 }
 

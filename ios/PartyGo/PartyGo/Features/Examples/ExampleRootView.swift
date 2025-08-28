@@ -27,21 +27,11 @@ struct ExampleRootView: View {
                 Text("Swift6")
             }
             
-            // 第三个标签页
-            VStack(spacing: 20) {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.orange)
-                
-                Text("个人")
-                    .font(.title)
-                
-                Text("这是第三个标签页的内容")
-                    .foregroundColor(.secondary)
-            }
+            // 第三个标签页 - 游戏中心
+            GamesMainView()
             .tabItem {
-                Image(systemName: "person")
-                Text("Samples")
+                Image(systemName: "gamecontroller")
+                Text("游戏")
             }
             
             // 第四个标签页
@@ -58,7 +48,7 @@ struct ExampleRootView: View {
             print("✅ ExampleRootView - 设置首次启动状态为 false")
 //            isFirstLaunch = true
 //            isVip = false
-        }
+        }.showTabBar()
     }
 }
 

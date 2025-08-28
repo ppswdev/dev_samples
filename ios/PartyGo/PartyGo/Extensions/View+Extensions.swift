@@ -67,3 +67,13 @@ extension View {
         }
     }
 }
+
+extension View {
+    func hideTabBar() -> some View {
+        self.toolbar(.hidden, for: .tabBar)
+    }
+    
+    func showTabBar() -> some View {
+        self.toolbar(.visible, for: .tabBar)
+    }
+}

@@ -35,7 +35,7 @@ class GlobalStateManager: ObservableObject {
     
     // MARK: - 应用配置
     @AppStorage("appTheme") var appTheme: AppTheme = .system
-    @AppStorage("appLanguage") var appLanguage: AppLanguage = .chinese
+    @AppStorage("appLanguage") var appLanguage: AppLanguage = .chineseSimplified
     @AppStorage("appVersion") var appVersion: String = ""
     @AppStorage("buildNumber") var buildNumber: String = ""
     @AppStorage("lastUpdateCheck") var lastUpdateCheck: TimeInterval = 0
@@ -81,16 +81,100 @@ class GlobalStateManager: ObservableObject {
     }
     
     enum AppLanguage: String, CaseIterable {
-        case chinese = "zh-CN"
-        case english = "en-US"
-        case japanese = "ja-JP"
+        case arabic = "ar"
+        case german = "de"
+        case english = "en"
+        case spanish = "es"
+        case filipino = "fil"
+        case french = "fr"
+        case indonesian = "id"
+        case italian = "it"
+        case japanese = "ja"
+        case korean = "ko"
+        case polish = "pl"
+        case portuguese = "pt"
+        case russian = "ru"
+        case thai = "th"
+        case turkish = "tr"
+        case vietnamese = "vi"
+        case chineseSimplified = "zh-Hans"
+        case chineseTraditional = "zh-Hant"
         
         var displayName: String {
             switch self {
-            case .chinese: return "中文"
+            case .arabic: return "العربية"
+            case .german: return "Deutsch"
             case .english: return "English"
+            case .spanish: return "Español"
+            case .filipino: return "Filipino"
+            case .french: return "Français"
+            case .indonesian: return "Bahasa Indonesia"
+            case .italian: return "Italiano"
             case .japanese: return "日本語"
+            case .korean: return "한국어"
+            case .polish: return "Polski"
+            case .portuguese: return "Português"
+            case .russian: return "Русский"
+            case .thai: return "ไทย"
+            case .turkish: return "Türkçe"
+            case .vietnamese: return "Tiếng Việt"
+            case .chineseSimplified: return "简体中文"
+            case .chineseTraditional: return "繁體中文"
             }
+        }
+        
+        var nativeName: String {
+            switch self {
+            case .arabic: return "العربية"
+            case .german: return "Deutsch"
+            case .english: return "English"
+            case .spanish: return "Español"
+            case .filipino: return "Filipino"
+            case .french: return "Français"
+            case .indonesian: return "Bahasa Indonesia"
+            case .italian: return "Italiano"
+            case .japanese: return "日本語"
+            case .korean: return "한국어"
+            case .polish: return "Polski"
+            case .portuguese: return "Português"
+            case .russian: return "Русский"
+            case .thai: return "ไทย"
+            case .turkish: return "Türkçe"
+            case .vietnamese: return "Tiếng Việt"
+            case .chineseSimplified: return "简体中文"
+            case .chineseTraditional: return "繁體中文"
+            }
+        }
+        
+        var flag: String {
+            switch self {
+            case .arabic: return "🇸🇦"
+            case .german: return "🇩🇪"
+            case .english: return "🇺🇸"
+            case .spanish: return "🇪🇸"
+            case .filipino: return "🇵🇭"
+            case .french: return "🇫🇷"
+            case .indonesian: return "🇮🇩"
+            case .italian: return "🇮🇹"
+            case .japanese: return "🇯🇵"
+            case .korean: return "🇰🇷"
+            case .polish: return "🇵🇱"
+            case .portuguese: return "🇵🇹"
+            case .russian: return "🇷🇺"
+            case .thai: return "🇹🇭"
+            case .turkish: return "🇹🇷"
+            case .vietnamese: return "🇻🇳"
+            case .chineseSimplified: return "🇨🇳"
+            case .chineseTraditional: return "🇨🇳"
+            }
+        }
+        
+        var locale: Locale {
+            return Locale(identifier: self.rawValue)
+        }
+        
+        var isRTL: Bool {
+            return self == .arabic
         }
     }
     
@@ -106,22 +190,6 @@ class GlobalStateManager: ObservableObject {
             case .connected: return "已连接"
             case .disconnected: return "已断开"
             case .connecting: return "连接中"
-            }
-        }
-    }
-    
-    enum NetworkType: String {
-        case unknown = "unknown"
-        case wifi = "wifi"
-        case cellular = "cellular"
-        case ethernet = "ethernet"
-        
-        var description: String {
-            switch self {
-            case .unknown: return "未知"
-            case .wifi: return "WiFi"
-            case .cellular: return "移动网络"
-            case .ethernet: return "以太网"
             }
         }
     }

@@ -63,6 +63,7 @@ struct PartyGoApp: App {
             .preferredColorScheme(globalState.appTheme == .dark ? .dark : 
                                     globalState.appTheme == .light ? .light : nil)
             .environment(\.locale, Locale(identifier: globalState.appLanguage.rawValue))
+            .id(globalState.appLanguage.rawValue)
             .onAppear {
                 rootManager.startAppFlow()
             }.onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
