@@ -59,9 +59,6 @@ class Dice3DEngine: NSObject, ObservableObject {
         sceneView?.isMultipleTouchEnabled = false
         sceneView?.isAccessibilityElement = false
         
-        // 禁用焦点管理
-        sceneView?.isAccessibilityElement = false
-        
         // 设置代理来处理焦点
         sceneView?.delegate = self
         
@@ -178,11 +175,6 @@ class Dice3DEngine: NSObject, ObservableObject {
         
         isRolling = true
         
-        // 生成随机旋转
-        let randomRotationX = Float.random(in: 0...Float.pi * 2)
-        let randomRotationY = Float.random(in: 0...Float.pi * 2)
-        let randomRotationZ = Float.random(in: 0...Float.pi * 2)
-        
         // 生成随机数字
         let maxNumber = currentDiceType.rawValue
         let newNumber = Int.random(in: 1...maxNumber)
@@ -195,21 +187,27 @@ class Dice3DEngine: NSObject, ObservableObject {
         
         // 使用更安全的动画方式
         let rotationAction = SCNAction.rotateBy(
-            x: CGFloat(randomRotationX),
-            y: CGFloat(randomRotationY),
-            z: CGFloat(randomRotationZ),
+            x: CGFloat.random(in: 0...CGFloat.pi * 2),
+            y: CGFloat.random(in: 0...CGFloat.pi * 2),
+            z: CGFloat.random(in: 0...CGFloat.pi * 2),
             duration: animationDuration
         )
         
         rotationAction.timingMode = .easeInEaseOut
         
         // 使用弱引用避免循环引用
-        diceNode.runAction(rotationAction) { [weak self] in
-            Task { @MainActor in
-                guard let self = self else { return }
-                self.currentNumber = newNumber
-                self.isRolling = false
-                self.rollHistory.append(newNumber)
+        await withCheckedContinuation { continuation in
+            diceNode.runAction(rotationAction) { [weak self] in
+                Task { @MainActor in
+                    guard let self = self else {
+                        continuation.resume()
+                        return
+                    }
+                    self.currentNumber = newNumber
+                    self.isRolling = false
+                    self.rollHistory.append(newNumber)
+                    continuation.resume()
+                }
             }
         }
     }

@@ -36,6 +36,30 @@ struct GamesMainView: View {
                         .padding(.vertical, 4)
                     }
                     
+                    NavigationLink(destination: SceneKitDemoView()) {
+                        HStack {
+                            Image(systemName: "dice.fill")
+                                .foregroundColor(.blue)
+                                .frame(width: 30)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("SceneKit Demo")
+                                    .font(.headline)
+                                
+                                Text("体验真实的3D骰子效果")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
                     // 可以在这里添加更多游戏
                     HStack {
                         Image(systemName: "gamecontroller.fill")
