@@ -89,3 +89,9 @@ extension View {
             .cornerRadius(AppConstants.UI.cornerRadius)
     }
 }
+
+extension View {
+    func textStroke(strokeColor: Color = .black, strokeWidth: CGFloat = 2, offset: CGSize = CGSize(width: 1, height: 1)) -> some View {
+        modifier(TextStrokeModifier(strokeColor: strokeColor, strokeWidth: strokeWidth, offset: offset))
+    }
+}
