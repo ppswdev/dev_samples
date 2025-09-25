@@ -20,8 +20,8 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      //home: const MyHomePage(title: 'Flutter Demo Home Page'),
-      home: const DemoPage(),
+      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      //home: const DemoPage(),
     );
   }
 }
@@ -85,9 +85,9 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
       //获取随机透明颜色
       //bean.color = getRandomColor();
-      //bean.color = getPredefinedColor();
+      bean.color = getPredefinedColor();
       //bean.color = getHSLColor();
-      bean.color = Colors.amber;
+      //bean.color = Colors.purple;
 
       //设置位置
       bean.position = const Offset(-1, -1);
@@ -144,14 +144,16 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
   buildBackground() {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.lightBlueAccent.withOpacity(0.3),
-              Colors.lightBlue.withOpacity(0.3),
-              Colors.blue.withOpacity(0.3),
+              Color(0xFFF90CA9),
+              Color(0xFFA003FC),
+              // Colors.lightBlueAccent.withOpacity(0.3),
+              // Colors.lightBlue.withOpacity(0.3),
+              // Colors.blue.withOpacity(0.3),
             ]),
       ),
     );
@@ -248,7 +250,7 @@ class CustomMyPainter extends CustomPainter {
       _paint.color = bean.color;
 
       //绘制气泡
-      //canvas.drawCircle(bean.position, bean.radius, _paint);
+      canvas.drawCircle(bean.position, bean.radius, _paint);
       // 绘制五角星
       //drawStar(canvas, bean.position, bean.radius, _paint);
       // 绘制心形
@@ -260,7 +262,7 @@ class CustomMyPainter extends CustomPainter {
       // 绘制六边形
       //drawHexagon(canvas, bean.position, bean.radius, _paint);
       // 绘制3D泡泡
-      draw3DBubble(canvas, bean.position, bean.radius, _paint);
+      //draw3DBubble(canvas, bean.position, bean.radius, _paint);
       // 绘制3D立体三角形
       //draw3DTriangle(canvas, bean.position, bean.radius, _paint);
       // 绘制3D心形

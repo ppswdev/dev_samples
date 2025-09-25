@@ -96,6 +96,10 @@ struct ExamplesIndexView: View {
                     NavigationLink("@EnvironmentObject", destination: EnvironmentObjectExampleView())
                     NavigationLink("环境值", destination: EnvironmentExampleView())
                 }
+
+                Section("Charts: 图表展示") {
+                    NavigationLink("图表示例", destination: ChartsExampleView())
+                }
             }
             .navigationTitle("SwiftUI入门到精通")
             .navigationBarTitleDisplayMode(.large)
