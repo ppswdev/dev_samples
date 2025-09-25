@@ -72,6 +72,50 @@ struct DecibelMeasurement: Codable, Identifiable {
     }
 }
 
+// MARK: - 统计指标数据模型
+
+/// 分贝统计指标
+struct DecibelStatistics: Codable, Identifiable {
+    let id = UUID()
+    let timestamp: Date
+    let measurementDuration: TimeInterval
+    let sampleCount: Int
+    
+    // 基本统计指标
+    let avgDecibel: Double      // AVG - 平均值
+    let minDecibel: Double      // MIN - 最小值
+    let maxDecibel: Double      // MAX - 最大值
+    let peakDecibel: Double     // PEAK - 峰值
+    
+    // 等效连续声级
+    let leqDecibel: Double      // Leq - 等效连续声级
+    
+    // 百分位数统计
+    let l10Decibel: Double      // L10 - 超过10%时间的声级
+    let l50Decibel: Double      // L50 - 超过50%时间的声级（中位数）
+    let l90Decibel: Double      // L90 - 超过90%时间的声级
+    
+    // 标准偏差
+    let standardDeviation: Double
+    
+    /// 获取统计摘要
+    var summary: String {
+        return String(format: "AVG: %.1f dB | MIN: %.1f dB | MAX: %.1f dB | PEAK: %.1f dB", 
+                     avgDecibel, minDecibel, maxDecibel, peakDecibel)
+    }
+    
+    /// 获取详细统计信息
+    var detailedSummary: String {
+        return String(format: """
+        AVG: %.1f dB | MIN: %.1f dB | MAX: %.1f dB | PEAK: %.1f dB
+        Leq: %.1f dB | L10: %.1f dB | L50: %.1f dB | L90: %.1f dB
+        标准差: %.1f dB | 样本数: %d | 时长: %.1fs
+        """, avgDecibel, minDecibel, maxDecibel, peakDecibel,
+             leqDecibel, l10Decibel, l50Decibel, l90Decibel,
+             standardDeviation, sampleCount, measurementDuration)
+    }
+}
+
 // MARK: - 测量会话数据模型
 
 /// 测量会话

@@ -4,6 +4,8 @@
 
 这是一个使用 Swift + SwiftUI 开发的分贝测量仪示例项目，实现了专业级的分贝测量功能。
 
+分贝仪测试视频标准：<https://www.douyin.com/jingxuan/search/1-1000%E5%88%86%E8%B4%9D%E5%A3%B0%E9%9F%B3?modal_id=7392228769546652947&type=general>
+
 ## 功能特性
 
 ### 核心功能

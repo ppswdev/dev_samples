@@ -15,16 +15,30 @@ class DecibelMeterViewModel: ObservableObject {
     
     // MARK: - 发布属性
     @Published var currentDecibel: Double = 0.0
+    @Published var leqDecibel: Double = 0.0
     @Published var maxDecibel: Double = 0.0
-    @Published var minDecibel: Double = 120.0
+    @Published var minDecibel: Double = 140.0  // 使用上限值作为初始值
+    @Published var peakDecibel: Double = 0.0
     @Published var isRecording: Bool = false
     @Published var measurementState: MeasurementState = .idle
     @Published var currentMeasurement: DecibelMeasurement?
     @Published var measurementHistory: [DecibelMeasurement] = []
+    @Published var measurementStartTime: Date?
+    @Published var currentStatistics: DecibelStatistics?
+    
+    // 设置相关
+    @Published var currentFrequencyWeighting: FrequencyWeighting = .aWeight
+    @Published var currentTimeWeighting: TimeWeighting = .fast
+    
+    // 应用生命周期相关
+    @Published var isAppInBackground: Bool = false
+    @Published var backgroundTimeRemaining: TimeInterval = 0
     
     // MARK: - 私有属性
     private let decibelManager = DecibelMeterManager.shared
     private var cancellables = Set<AnyCancellable>()
+    private var statisticsTimer: Timer?
+    private let appLifecycleManager = AppLifecycleManager.shared
     
     // MARK: - 初始化
     init() {
@@ -37,12 +51,14 @@ class DecibelMeterViewModel: ObservableObject {
     func startMeasurement() {
         Task {
             await decibelManager.startMeasurement()
+            startStatisticsTimer()
         }
     }
     
     /// 停止测量
     func stopMeasurement() {
         decibelManager.stopMeasurement()
+        stopStatisticsTimer()
     }
     
     /// 暂停测量
@@ -60,12 +76,53 @@ class DecibelMeterViewModel: ObservableObject {
         decibelManager.clearHistory()
         measurementHistory.removeAll()
         maxDecibel = 0.0
-        minDecibel = 120.0
+        minDecibel = 140.0  // 重置为上限值
     }
     
     /// 设置校准偏移
     func setCalibrationOffset(_ offset: Double) {
         decibelManager.setCalibrationOffset(offset)
+    }
+    
+    /// 重置所有数据
+    func resetAllData() {
+        decibelManager.clearHistory()
+        measurementHistory.removeAll()
+        maxDecibel = 0.0
+        minDecibel = 140.0  // 重置为上限值
+        peakDecibel = 0.0
+        leqDecibel = 0.0
+        currentStatistics = nil
+        measurementStartTime = nil
+    }
+    
+    /// 设置频率权重
+    func setFrequencyWeighting(_ weighting: FrequencyWeighting) {
+        currentFrequencyWeighting = weighting
+        decibelManager.setFrequencyWeighting(weighting)
+    }
+    
+    /// 设置时间权重
+    func setTimeWeighting(_ weighting: TimeWeighting) {
+        currentTimeWeighting = weighting
+        decibelManager.setTimeWeighting(weighting)
+    }
+    
+    /// 获取当前测量时长（格式化）
+    func getFormattedDuration() -> String {
+        guard let startTime = measurementStartTime else { return "00:00:00" }
+        let duration = Date().timeIntervalSince(startTime)
+        return formatDuration(duration)
+    }
+    
+    /// 获取可用的频率权重
+    func getAvailableFrequencyWeightings() -> [FrequencyWeighting] {
+        return decibelManager.getAvailableFrequencyWeightings()
+    }
+    
+    /// 获取可用的时间权重
+    func getAvailableTimeWeightings() -> [TimeWeighting] {
+        return decibelManager.getAvailableTimeWeightings()
     }
     
     /// 获取当前状态描述
@@ -128,6 +185,11 @@ class DecibelMeterViewModel: ObservableObject {
         decibelManager.onStateChange = { [weak self] newState in
             self?.measurementState = newState
             self?.isRecording = (newState == .measuring)
+            
+            // 记录开始时间
+            if newState == .measuring && self?.measurementStartTime == nil {
+                self?.measurementStartTime = Date()
+            }
         }
         
         // 分贝值更新回调
@@ -146,6 +208,34 @@ class DecibelMeterViewModel: ObservableObject {
             self?.maxDecibel = max
             self?.minDecibel = min
         }
+        
+        // 高级统计信息更新回调
+        decibelManager.onAdvancedStatisticsUpdate = { [weak self] current, peak, max, min in
+            self?.currentDecibel = current
+            self?.peakDecibel = peak
+            self?.maxDecibel = max
+            self?.minDecibel = min
+        }
+        
+        // 初始化当前设置
+        currentFrequencyWeighting = decibelManager.getCurrentFrequencyWeighting()
+        currentTimeWeighting = decibelManager.getCurrentTimeWeighting()
+        
+        // 监听应用生命周期
+        setupAppLifecycleCallbacks()
+    }
+    
+    /// 设置应用生命周期回调
+    private func setupAppLifecycleCallbacks() {
+        // 监听后台状态
+        appLifecycleManager.$isAppInBackground
+            .assign(to: \.isAppInBackground, on: self)
+            .store(in: &cancellables)
+        
+        // 监听剩余后台时间
+        appLifecycleManager.$backgroundTimeRemaining
+            .assign(to: \.backgroundTimeRemaining, on: self)
+            .store(in: &cancellables)
     }
 }
 
@@ -188,6 +278,40 @@ extension DecibelMeterViewModel {
             return "必须佩戴听力保护设备，避免长时间暴露"
         default:
             return "当前环境安全"
+        }
+    }
+    
+    /// 格式化时间间隔为时分秒格式
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = Int(duration) % 3600 / 60
+        let seconds = Int(duration) % 60
+        
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
+    
+    /// 开始统计定时器
+    private func startStatisticsTimer() {
+        stopStatisticsTimer()
+        statisticsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStatistics()
+            }
+        }
+    }
+    
+    /// 停止统计定时器
+    private func stopStatisticsTimer() {
+        statisticsTimer?.invalidate()
+        statisticsTimer = nil
+    }
+    
+    /// 更新统计信息
+    private func updateStatistics() {
+        // 更新Leq值
+        if let statistics = decibelManager.getCurrentStatistics() {
+            currentStatistics = statistics
+            leqDecibel = statistics.leqDecibel
         }
     }
 }
