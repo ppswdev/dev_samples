@@ -29,9 +29,22 @@
 		B2BC162F2E82387A00AFBE63 /* DecibelMeterDemoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DecibelMeterDemoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B2BC16D12E852F1F00AFBE63 /* Exceptions for "DecibelMeterDemo" folder in "DecibelMeterDemo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B2BC16172E82387800AFBE63 /* DecibelMeterDemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B2BC161A2E82387800AFBE63 /* DecibelMeterDemo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B2BC16D12E852F1F00AFBE63 /* Exceptions for "DecibelMeterDemo" folder in "DecibelMeterDemo" target */,
+			);
 			path = DecibelMeterDemo;
 			sourceTree = "<group>";
 		};
@@ -398,6 +411,7 @@
 				DEVELOPMENT_TEAM = 645F99BV7K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DecibelMeterDemo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "分贝测量仪";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风来测量环境噪声分贝值，用于噪声监测和听力保护。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -430,6 +444,7 @@
 				DEVELOPMENT_TEAM = 645F99BV7K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DecibelMeterDemo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "分贝测量仪";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风来测量环境噪声分贝值，用于噪声监测和听力保护。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
