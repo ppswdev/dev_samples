@@ -134,8 +134,7 @@ class DecibelMeterManager: NSObject {
     private var measurementState: MeasurementState = .idle
     private var isRecording = false
     private var currentDecibel: Double = 0.0
-    private var maxDecibel: Double = 0.0
-    private var minDecibel: Double = 0.0
+    private var minDecibel: Double = -1.0  // -1表示未初始化
     
     // MARK: - 回调闭包
     var onMeasurementUpdate: ((DecibelMeasurement) -> Void)?
@@ -163,7 +162,8 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 统计相关属性
     private var currentStatistics: DecibelStatistics?
-    private var peakDecibel: Double = 0.0
+    private var peakDecibel: Double = -1.0  // PEAK: 瞬时峰值，无时间权重，-1表示未初始化
+    private var maxDecibel: Double = -1.0   // MAX: 时间权重后的最大值，-1表示未初始化
     private var measurementStartTime: Date?
     
     // MARK: - 时间权重相关属性
@@ -226,23 +226,27 @@ class DecibelMeterManager: NSObject {
     }
     
     /// 更新分贝值并通知回调
-    private func updateDecibel(_ newDecibel: Double) {
+    private func updateDecibel(_ newDecibel: Double, timeWeightedDecibel: Double, rawDecibel: Double) {
         // 验证并限制分贝值在合理范围内
         let validatedDecibel = validateDecibelValue(newDecibel)
         currentDecibel = validatedDecibel
         onDecibelUpdate?(validatedDecibel)
         
-        // 更新统计信息
-        if validatedDecibel > maxDecibel {
-            maxDecibel = validatedDecibel
-        }
-        if validatedDecibel < minDecibel {
-            minDecibel = validatedDecibel
+        // 更新MAX值（使用时间权重后的值）
+        let validatedTimeWeighted = validateDecibelValue(timeWeightedDecibel)
+        if maxDecibel < 0 || validatedTimeWeighted > maxDecibel {
+            maxDecibel = validatedTimeWeighted
         }
         
-        // 更新峰值（瞬时最大值）
-        if validatedDecibel > peakDecibel {
-            peakDecibel = validatedDecibel
+        // 更新MIN值（使用时间权重后的值）
+        if minDecibel < 0 || validatedTimeWeighted < minDecibel {
+            minDecibel = validatedTimeWeighted
+        }
+        
+        // 更新PEAK值（使用原始未加权的瞬时峰值）
+        let validatedRaw = validateDecibelValue(rawDecibel)
+        if peakDecibel < 0 || validatedRaw > peakDecibel {
+            peakDecibel = validatedRaw
         }
         
         onStatisticsUpdate?(currentDecibel, maxDecibel, minDecibel)
@@ -269,9 +273,9 @@ class DecibelMeterManager: NSObject {
             
             // 初始化统计相关属性
             measurementStartTime = Date()
-            peakDecibel = 0.0
-            maxDecibel = 0.0
-            minDecibel = maxDecibelLimit  // 使用上限值作为初始最小值
+            peakDecibel = -1.0  // 重置为未初始化状态
+            maxDecibel = -1.0   // 重置为未初始化状态
+            minDecibel = -1.0   // 重置为未初始化状态，准备记录真实最小值
             
             updateState(.measuring)
             isRecording = true
@@ -357,6 +361,13 @@ class DecibelMeterManager: NSObject {
         return currentStatistics
     }
     
+    /// 获取实时LEQ值
+    func getRealTimeLeq() -> Double {
+        guard !measurementHistory.isEmpty else { return 0.0 }
+        let decibelValues = measurementHistory.map { $0.calibratedDecibel }
+        return calculateLeq(from: decibelValues)
+    }
+    
     /// 获取当前峰值
     func getCurrentPeak() -> Double {
         return peakDecibel
@@ -374,7 +385,8 @@ class DecibelMeterManager: NSObject {
         // 基本统计
         let avgDecibel = decibelValues.reduce(0, +) / Double(decibelValues.count)
         let minDecibel = decibelValues.min() ?? 0.0
-        let maxDecibel = decibelValues.max() ?? 0.0
+        // MAX使用实时追踪的时间权重最大值，不是历史数据的最大值
+        let maxDecibel = self.maxDecibel
         // PEAK使用实时追踪的瞬时峰值，不是历史数据的最大值
         let peakDecibel = self.peakDecibel
         
@@ -413,7 +425,7 @@ class DecibelMeterManager: NSObject {
     func clearHistory() {
         measurementHistory.removeAll()
         maxDecibel = 0.0
-        minDecibel = maxDecibelLimit  // 重置为上限值
+        minDecibel = -1.0   // 重置为未初始化状态
         peakDecibel = 0.0
         currentStatistics = nil
         measurementStartTime = nil
@@ -618,9 +630,17 @@ class DecibelMeterManager: NSObject {
         // 计算分贝值
         let measurement = calculateDecibelMeasurement(from: samples)
         
+        // 获取用于MAX和PEAK计算的值
+        let currentTimeWeightedDecibel = timeWeightingFilter?.applyWeighting(currentTimeWeighting, currentValue: measurement.aWeightedDecibel) ?? measurement.aWeightedDecibel
+        let rawDecibel = measurement.rawDecibel
+        
         // 更新测量数据并通知回调
         updateMeasurement(measurement)
-        updateDecibel(measurement.calibratedDecibel)
+        updateDecibel(
+            measurement.calibratedDecibel,
+            timeWeightedDecibel: currentTimeWeightedDecibel,
+            rawDecibel: rawDecibel
+        )
         
         // 添加到历史记录
         measurementHistory.append(measurement)

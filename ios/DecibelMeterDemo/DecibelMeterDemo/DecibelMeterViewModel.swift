@@ -17,9 +17,10 @@ class DecibelMeterViewModel: ObservableObject {
     @Published var currentDecibel: Double = 0.0
     @Published var leqDecibel: Double = 0.0
     @Published var maxDecibel: Double = 0.0
-    @Published var minDecibel: Double = 140.0  // 使用上限值作为初始值
-    @Published var peakDecibel: Double = 0.0
+    @Published var minDecibel: Double = -1.0  // -1表示未初始化
+    @Published var peakDecibel: Double = -1.0  // -1表示未初始化
     @Published var isRecording: Bool = false
+    @Published var hasStartedMeasurement: Bool = false  // 是否已经开始过测量
     @Published var measurementState: MeasurementState = .idle
     @Published var currentMeasurement: DecibelMeasurement?
     @Published var measurementHistory: [DecibelMeasurement] = []
@@ -51,6 +52,7 @@ class DecibelMeterViewModel: ObservableObject {
     func startMeasurement() {
         Task {
             await decibelManager.startMeasurement()
+            hasStartedMeasurement = true  // 标记已经开始测量
             startStatisticsTimer()
         }
     }
@@ -75,8 +77,8 @@ class DecibelMeterViewModel: ObservableObject {
     func clearHistory() {
         decibelManager.clearHistory()
         measurementHistory.removeAll()
-        maxDecibel = 0.0
-        minDecibel = 140.0  // 重置为上限值
+        maxDecibel = -1.0  // 重置为未初始化状态
+        minDecibel = -1.0  // 重置为未初始化状态
     }
     
     /// 设置校准偏移
@@ -88,12 +90,13 @@ class DecibelMeterViewModel: ObservableObject {
     func resetAllData() {
         decibelManager.clearHistory()
         measurementHistory.removeAll()
-        maxDecibel = 0.0
-        minDecibel = 140.0  // 重置为上限值
-        peakDecibel = 0.0
+        maxDecibel = -1.0  // 重置为未初始化状态
+        minDecibel = -1.0  // 重置为未初始化状态
+        peakDecibel = -1.0  // 重置为未初始化状态
         leqDecibel = 0.0
         currentStatistics = nil
         measurementStartTime = nil
+        hasStartedMeasurement = false  // 重置测量状态
     }
     
     /// 设置频率权重
@@ -204,17 +207,27 @@ class DecibelMeterViewModel: ObservableObject {
         
         // 统计信息更新回调
         decibelManager.onStatisticsUpdate = { [weak self] current, max, min in
-            self?.currentDecibel = current
-            self?.maxDecibel = max
-            self?.minDecibel = min
+            Task { @MainActor in
+                self?.currentDecibel = current
+                // 只在已经开始测量后更新统计值
+                if self?.hasStartedMeasurement == true {
+                    self?.maxDecibel = max
+                    self?.minDecibel = min
+                }
+            }
         }
         
         // 高级统计信息更新回调
         decibelManager.onAdvancedStatisticsUpdate = { [weak self] current, peak, max, min in
-            self?.currentDecibel = current
-            self?.peakDecibel = peak
-            self?.maxDecibel = max
-            self?.minDecibel = min
+            Task { @MainActor in
+                self?.currentDecibel = current
+                // 只在已经开始测量后更新统计值
+                if self?.hasStartedMeasurement == true {
+                    self?.peakDecibel = peak
+                    self?.maxDecibel = max
+                    self?.minDecibel = min
+                }
+            }
         }
         
         // 初始化当前设置
@@ -308,10 +321,12 @@ extension DecibelMeterViewModel {
     
     /// 更新统计信息
     private func updateStatistics() {
-        // 更新Leq值
+        // 实时更新LEQ值（不需要等待测量结束）
+        leqDecibel = decibelManager.getRealTimeLeq()
+        
+        // 如果有完整统计信息，也更新它
         if let statistics = decibelManager.getCurrentStatistics() {
             currentStatistics = statistics
-            leqDecibel = statistics.leqDecibel
         }
     }
 }

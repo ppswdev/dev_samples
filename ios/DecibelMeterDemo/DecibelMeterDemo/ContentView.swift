@@ -334,19 +334,19 @@ struct EnhancedStatisticsView: View {
             HStack(spacing: 20) {
                 StatisticItemView(
                     title: "MIN",
-                    value: String(format: "%.1f", minDecibel),
+                    value: minDecibel < 0 ? "0.0" : String(format: "%.1f", minDecibel),
                     color: .blue
                 )
                 
                 StatisticItemView(
                     title: "MAX",
-                    value: String(format: "%.1f", maxDecibel),
+                    value: maxDecibel < 0 ? "0.0" : String(format: "%.1f", maxDecibel),
                     color: .red
                 )
                 
                 StatisticItemView(
                     title: "PEAK",
-                    value: String(format: "%.1f", peakDecibel),
+                    value: peakDecibel < 0 ? "0.0" : String(format: "%.1f", peakDecibel),
                     color: .purple
                 )
             }
@@ -365,13 +365,13 @@ struct StatisticsView: View {
         HStack(spacing: 30) {
             StatisticItemView(
                 title: "最大值",
-                value: String(format: "%.1f", maxDecibel),
+                value: maxDecibel < 0 ? "--" : String(format: "%.1f", maxDecibel),
                 color: .red
             )
             
             StatisticItemView(
                 title: "最小值",
-                value: String(format: "%.1f", minDecibel),
+                value: minDecibel < 0 ? "--" : String(format: "%.1f", minDecibel),
                 color: .blue
             )
             
