@@ -14,15 +14,15 @@ import UIKit
 // 注意：DecibelMeasurement 定义在 DecibelDataModels.swift 中
 
 /// 测量状态
+/// 测量状态（符合专业声级计标准）
 enum MeasurementState: Equatable {
-    case idle
-    case measuring
-    case paused
-    case error(String)
+    case idle      // 停止状态
+    case measuring // 测量状态
+    case error(String) // 错误状态
     
     static func == (lhs: MeasurementState, rhs: MeasurementState) -> Bool {
         switch (lhs, rhs) {
-        case (.idle, .idle), (.measuring, .measuring), (.paused, .paused):
+        case (.idle, .idle), (.measuring, .measuring):
             return true
         case (.error(let lhsMessage), .error(let rhsMessage)):
             return lhsMessage == rhsMessage
@@ -81,6 +81,18 @@ enum TimeWeighting: String, CaseIterable {
             return "冲击噪声、爆炸声、瞬时峰值"
         }
     }
+    
+    /// 显示符号，用于单位显示
+    var displaySymbol: String {
+        switch self {
+        case .fast:
+            return "F"
+        case .slow:
+            return "S"
+        case .impulse:
+            return "I"
+        }
+    }
 }
 
 /// 频率权重类型
@@ -120,6 +132,22 @@ enum FrequencyWeighting: String, CaseIterable {
             return "ITU-R BS.468-4"
         }
     }
+    
+    /// 显示符号，用于单位显示
+    var displaySymbol: String {
+        switch self {
+        case .zWeight:
+            return "Z"
+        case .aWeight:
+            return "A"
+        case .bWeight:
+            return "B"
+        case .cWeight:
+            return "C"
+        case .ituR468:
+            return "ITU"
+        }
+    }
 }
 
 // MARK: - 分贝测量管理器
@@ -137,10 +165,19 @@ class DecibelMeterManager: NSObject {
     private var minDecibel: Double = -1.0  // -1表示未初始化
     
     // MARK: - 回调闭包
+    /// 分贝测量结果更新回调。当有新的分贝测量结果产生时调用，参数为最新的 DecibelMeasurement 对象
     var onMeasurementUpdate: ((DecibelMeasurement) -> Void)?
+    
+    /// 测量状态变化回调。当测量状态（空闲/测量中/错误）发生改变时触发，参数为当前测量状态
     var onStateChange: ((MeasurementState) -> Void)?
+    
+    /// 实时分贝值更新回调。当有新的分贝数值时调用，参数为最新的分贝值（Double 类型，已校准）
     var onDecibelUpdate: ((Double) -> Void)?
+    
+    /// 当前分贝、最大分贝、最小分贝
     var onStatisticsUpdate: ((Double, Double, Double) -> Void)?
+    
+    /// 当前分贝值，PEAK, MAX, MIN
     var onAdvancedStatisticsUpdate: ((Double, Double, Double, Double) -> Void)?
     
     // MARK: - 音频相关属性
@@ -186,79 +223,6 @@ class DecibelMeterManager: NSObject {
     }
     
     // MARK: - 公共方法
-    
-    /// 获取当前测量状态
-    func getCurrentState() -> MeasurementState {
-        return measurementState
-    }
-    
-    /// 获取当前分贝值
-    func getCurrentDecibel() -> Double {
-        return currentDecibel
-    }
-    
-    /// 获取当前测量数据
-    func getCurrentMeasurement() -> DecibelMeasurement? {
-        return currentMeasurement
-    }
-    
-    /// 获取统计信息
-    func getStatistics() -> (current: Double, max: Double, min: Double) {
-        return (currentDecibel, maxDecibel, minDecibel)
-    }
-    
-    /// 获取测量历史
-    func getMeasurementHistory() -> [DecibelMeasurement] {
-        return measurementHistory
-    }
-    
-    // MARK: - 私有辅助方法
-    
-    /// 验证分贝值是否在合理范围内
-    private func validateDecibelValue(_ value: Double) -> Double {
-        return max(minDecibelLimit, min(value, maxDecibelLimit))
-    }
-    
-    /// 更新状态并通知回调
-    private func updateState(_ newState: MeasurementState) {
-        measurementState = newState
-        onStateChange?(newState)
-    }
-    
-    /// 更新分贝值并通知回调
-    private func updateDecibel(_ newDecibel: Double, timeWeightedDecibel: Double, rawDecibel: Double) {
-        // 验证并限制分贝值在合理范围内
-        let validatedDecibel = validateDecibelValue(newDecibel)
-        currentDecibel = validatedDecibel
-        onDecibelUpdate?(validatedDecibel)
-        
-        // 更新MAX值（使用时间权重后的值）
-        let validatedTimeWeighted = validateDecibelValue(timeWeightedDecibel)
-        if maxDecibel < 0 || validatedTimeWeighted > maxDecibel {
-            maxDecibel = validatedTimeWeighted
-        }
-        
-        // 更新MIN值（使用时间权重后的值）
-        if minDecibel < 0 || validatedTimeWeighted < minDecibel {
-            minDecibel = validatedTimeWeighted
-        }
-        
-        // 更新PEAK值（使用原始未加权的瞬时峰值）
-        let validatedRaw = validateDecibelValue(rawDecibel)
-        if peakDecibel < 0 || validatedRaw > peakDecibel {
-            peakDecibel = validatedRaw
-        }
-        
-        onStatisticsUpdate?(currentDecibel, maxDecibel, minDecibel)
-        onAdvancedStatisticsUpdate?(currentDecibel, peakDecibel, maxDecibel, minDecibel)
-    }
-    
-    /// 更新测量数据并通知回调
-    private func updateMeasurement(_ measurement: DecibelMeasurement) {
-        currentMeasurement = measurement
-        onMeasurementUpdate?(measurement)
-    }
-    
     /// 开始测量
     func startMeasurement() async {
         guard measurementState != .measuring else { return }
@@ -301,18 +265,29 @@ class DecibelMeterManager: NSObject {
         isRecording = false
     }
     
-    /// 暂停测量
-    func pauseMeasurement() {
-        guard measurementState == .measuring else { return }
-        updateState(.paused)
-        isRecording = false
+    /// 获取当前测量状态
+    func getCurrentState() -> MeasurementState {
+        return measurementState
     }
     
-    /// 恢复测量
-    func resumeMeasurement() {
-        guard measurementState == .paused else { return }
-        updateState(.measuring)
-        isRecording = true
+    /// 获取当前分贝值
+    func getCurrentDecibel() -> Double {
+        return currentDecibel
+    }
+    
+    /// 获取当前测量数据
+    func getCurrentMeasurement() -> DecibelMeasurement? {
+        return currentMeasurement
+    }
+    
+    /// 获取统计信息
+    func getStatistics() -> (current: Double, max: Double, min: Double) {
+        return (currentDecibel, maxDecibel, minDecibel)
+    }
+    
+    /// 获取测量历史
+    func getMeasurementHistory() -> [DecibelMeasurement] {
+        return measurementHistory
     }
     
     /// 设置校准偏移
@@ -429,6 +404,53 @@ class DecibelMeterManager: NSObject {
         peakDecibel = 0.0
         currentStatistics = nil
         measurementStartTime = nil
+    }
+    
+    // MARK: - 私有辅助方法
+    
+    /// 验证分贝值是否在合理范围内
+    private func validateDecibelValue(_ value: Double) -> Double {
+        return max(minDecibelLimit, min(value, maxDecibelLimit))
+    }
+    
+    /// 更新状态并通知回调
+    private func updateState(_ newState: MeasurementState) {
+        measurementState = newState
+        onStateChange?(newState)
+    }
+    
+    /// 更新分贝值并通知回调
+    private func updateDecibel(_ newDecibel: Double, timeWeightedDecibel: Double, rawDecibel: Double) {
+        // 验证并限制分贝值在合理范围内
+        let validatedDecibel = validateDecibelValue(newDecibel)
+        currentDecibel = validatedDecibel
+        onDecibelUpdate?(validatedDecibel)
+        
+        // 更新MAX值（使用时间权重后的值）
+        let validatedTimeWeighted = validateDecibelValue(timeWeightedDecibel)
+        if maxDecibel < 0 || validatedTimeWeighted > maxDecibel {
+            maxDecibel = validatedTimeWeighted
+        }
+        
+        // 更新MIN值（使用时间权重后的值）
+        if minDecibel < 0 || validatedTimeWeighted < minDecibel {
+            minDecibel = validatedTimeWeighted
+        }
+        
+        // 更新PEAK值（使用原始未加权的瞬时峰值）
+        let validatedRaw = validateDecibelValue(rawDecibel)
+        if peakDecibel < 0 || validatedRaw > peakDecibel {
+            peakDecibel = validatedRaw
+        }
+        
+        onStatisticsUpdate?(currentDecibel, maxDecibel, minDecibel)
+        onAdvancedStatisticsUpdate?(currentDecibel, peakDecibel, maxDecibel, minDecibel)
+    }
+    
+    /// 更新测量数据并通知回调
+    private func updateMeasurement(_ measurement: DecibelMeasurement) {
+        currentMeasurement = measurement
+        onMeasurementUpdate?(measurement)
     }
     
     // MARK: - 私有统计计算方法

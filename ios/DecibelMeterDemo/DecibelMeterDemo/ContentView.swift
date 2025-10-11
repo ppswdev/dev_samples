@@ -29,7 +29,9 @@ struct ContentView: View {
                     // 分贝值显示
                     DecibelDisplayView(
                         decibel: viewModel.currentDecibel,
-                        measurement: viewModel.currentMeasurement
+                        measurement: viewModel.currentMeasurement,
+                        frequencyWeighting: viewModel.currentFrequencyWeighting,
+                        timeWeighting: viewModel.currentTimeWeighting
                     )
                     
                     // 状态指示器
@@ -68,12 +70,6 @@ struct ContentView: View {
                     },
                     onStop: {
                         viewModel.stopMeasurement()
-                    },
-                    onPause: {
-                        viewModel.pauseMeasurement()
-                    },
-                    onResume: {
-                        viewModel.resumeMeasurement()
                     },
                     onReset: {
                         viewModel.resetAllData()
@@ -148,6 +144,8 @@ struct ContentView: View {
 struct DecibelDisplayView: View {
     let decibel: Double
     let measurement: DecibelMeasurement?
+    let frequencyWeighting: FrequencyWeighting
+    let timeWeighting: TimeWeighting
     
     var body: some View {
         VStack(spacing: 10) {
@@ -156,8 +154,8 @@ struct DecibelDisplayView: View {
                 .font(.system(size: 80, weight: .bold, design: .rounded))
                 .foregroundColor(decibelColor)
             
-            // 单位
-            Text("dB")
+            // 单位（包含权重信息）
+            Text(weightedUnitDisplay)
                 .font(.title2)
                 .foregroundColor(.secondary)
             
@@ -172,6 +170,15 @@ struct DecibelDisplayView: View {
                     .cornerRadius(20)
             }
         }
+    }
+    
+    /// 生成带权重信息的单位显示
+    private var weightedUnitDisplay: String {
+        let freqWeight = frequencyWeighting.displaySymbol
+        let timeWeight = timeWeighting.displaySymbol
+        
+        // 格式：dB(频率权重)时间权重，如 dB(A)F, dB(C)S, dB(Z)I
+        return "dB(\(freqWeight))\(timeWeight)"
     }
     
     private var decibelColor: Color {
@@ -217,8 +224,6 @@ struct StatusIndicatorView: View {
             return .gray
         case .measuring:
             return .green
-        case .paused:
-            return .orange
         case .error:
             return .red
         }
@@ -230,8 +235,6 @@ struct StatusIndicatorView: View {
             return "待机"
         case .measuring:
             return "测量中"
-        case .paused:
-            return "已暂停"
         case .error(let message):
             return "错误: \(message)"
         }
@@ -410,8 +413,6 @@ struct EnhancedControlButtonsView: View {
     let measurementState: MeasurementState
     let onStart: () -> Void
     let onStop: () -> Void
-    let onPause: () -> Void
-    let onResume: () -> Void
     let onReset: () -> Void
     
     var body: some View {
@@ -423,15 +424,6 @@ struct EnhancedControlButtonsView: View {
                     Image(systemName: isRecording ? "stop.circle.fill" : "play.circle.fill")
                         .font(.system(size: 60))
                         .foregroundColor(isRecording ? .red : .green)
-                }
-                
-                // 暂停/恢复按钮
-                if isRecording {
-                    Button(action: measurementState == .paused ? onResume : onPause) {
-                        Image(systemName: measurementState == .paused ? "play.circle.fill" : "pause.circle.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.orange)
-                    }
                 }
             }
             
@@ -461,8 +453,6 @@ struct ControlButtonsView: View {
     let measurementState: MeasurementState
     let onStart: () -> Void
     let onStop: () -> Void
-    let onPause: () -> Void
-    let onResume: () -> Void
     
     var body: some View {
         HStack(spacing: 20) {
@@ -471,15 +461,6 @@ struct ControlButtonsView: View {
                 Image(systemName: isRecording ? "stop.circle.fill" : "play.circle.fill")
                     .font(.system(size: 60))
                     .foregroundColor(isRecording ? .red : .green)
-            }
-            
-            // 暂停/恢复按钮
-            if isRecording {
-                Button(action: measurementState == .paused ? onResume : onPause) {
-                    Image(systemName: measurementState == .paused ? "play.circle.fill" : "pause.circle.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(.orange)
-                }
             }
         }
         .padding(.bottom, 30)

@@ -63,16 +63,6 @@ class DecibelMeterViewModel: ObservableObject {
         stopStatisticsTimer()
     }
     
-    /// 暂停测量
-    func pauseMeasurement() {
-        decibelManager.pauseMeasurement()
-    }
-    
-    /// 恢复测量
-    func resumeMeasurement() {
-        decibelManager.resumeMeasurement()
-    }
-    
     /// 清除历史记录
     func clearHistory() {
         decibelManager.clearHistory()
@@ -135,8 +125,6 @@ class DecibelMeterViewModel: ObservableObject {
             return "待机"
         case .measuring:
             return "测量中"
-        case .paused:
-            return "已暂停"
         case .error(let message):
             return "错误: \(message)"
         }
