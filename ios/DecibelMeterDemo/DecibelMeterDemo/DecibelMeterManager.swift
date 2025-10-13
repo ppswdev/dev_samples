@@ -1193,151 +1193,24 @@ class DecibelMeterManager: NSObject {
         }
     }
     
-    // MARK: - 噪音测量计功能
-    
-    /// 计算TWA（时间加权平均值）
-    ///
-    /// 根据LEQ和测量时长计算8小时时间加权平均值
-    /// 符合 OSHA、NIOSH、GBZ 标准的TWA计算要求
-    ///
-    /// - Parameters:
-    ///   - leq: 等效连续声级（dB）
-    ///   - duration: 实际测量时长（秒）
-    ///   - standardWorkDay: 标准工作日时长（小时），默认8小时
-    /// - Returns: TWA值（dB）
-    ///
-    /// **计算公式**：
-    /// ```
-    /// TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
-    /// ```
-    /// 其中 T 为实际暴露时长（小时）
-    ///
-    /// **使用示例**：
-    /// ```swift
-    /// let twa = manager.calculateTWA(leq: 90.0, duration: 14400) // 4小时
-    /// print("TWA: \(twa) dB") // 约87 dB
-    /// ```
-    func calculateTWA(leq: Double, duration: TimeInterval, standardWorkDay: Double = 8.0) -> Double {
-        let exposureHours = duration / 3600.0  // 转换为小时
-        
-        // TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
-        let energyFraction = (exposureHours / standardWorkDay) * pow(10.0, leq / 10.0)
-        let twa = 10.0 * log10(energyFraction)
-        
-        return twa
-    }
-    
-    /// 计算噪声剂量（Dose）
-    ///
-    /// 根据TWA计算噪声剂量百分比
-    /// 符合 OSHA、NIOSH、GBZ 标准的剂量计算要求
-    ///
-    /// - Parameters:
-    ///   - twa: 时间加权平均值（dB）
-    ///   - standard: 噪声限值标准，默认NIOSH
-    /// - Returns: 噪声剂量百分比（%）
-    ///
-    /// **计算公式**：
-    /// ```
-    /// Dose = 100 × 2^((TWA - CriterionLevel) / ExchangeRate)
-    /// ```
-    ///
-    /// **使用示例**：
-    /// ```swift
-    /// let dose = manager.calculateNoiseDose(twa: 90.0, standard: .osha)
-    /// print("剂量: \(dose)%") // 200%
-    /// ```
-    func calculateNoiseDose(twa: Double, standard: NoiseStandard) -> Double {
-        let criterionLevel = standard.criterionLevel
-        let exchangeRate = standard.exchangeRate
-        
-        // Dose = 100 × 2^((TWA - 85) / ExchangeRate)
-        let dose = 100.0 * pow(2.0, (twa - criterionLevel) / exchangeRate)
-        
-        return dose
-    }
-    
-    /// 计算剂量率（Dose Rate）
-    ///
-    /// 计算单位时间内的剂量累积速率
-    ///
-    /// - Parameters:
-    ///   - currentDose: 当前累积剂量（%）
-    ///   - duration: 已暴露时长（秒）
-    /// - Returns: 剂量率（%/小时）
-    ///
-    /// **计算公式**：
-    /// ```
-    /// Dose Rate = Current Dose / Elapsed Time (hours)
-    /// ```
-    ///
-    /// **使用示例**：
-    /// ```swift
-    /// let rate = manager.calculateDoseRate(currentDose: 50.0, duration: 7200) // 2小时
-    /// print("剂量率: \(rate)%/小时") // 25%/小时
-    /// ```
-    func calculateDoseRate(currentDose: Double, duration: TimeInterval) -> Double {
-        let exposureHours = duration / 3600.0
-        guard exposureHours > 0 else { return 0.0 }
-        
-        return currentDose / exposureHours
-    }
-    
-    /// 预测达到100%剂量的时间
-    ///
-    /// 基于当前剂量率预测何时达到100%剂量
-    ///
-    /// - Parameters:
-    ///   - currentDose: 当前累积剂量（%）
-    ///   - doseRate: 剂量率（%/小时）
-    /// - Returns: 预测时间（小时），如果已超过100%或剂量率为0则返回nil
-    ///
-    /// **使用示例**：
-    /// ```swift
-    /// if let time = manager.predictTimeToFullDose(currentDose: 50.0, doseRate: 25.0) {
-    ///     print("预计\(time)小时后达到100%剂量")
-    /// }
-    /// ```
-    func predictTimeToFullDose(currentDose: Double, doseRate: Double) -> Double? {
-        guard doseRate > 0, currentDose < 100.0 else { return nil }
-        
-        let remainingDose = 100.0 - currentDose
-        return remainingDose / doseRate
-    }
-    
-    /// 计算剩余允许暴露时间
-    ///
-    /// 计算在不超过100%剂量的前提下，还可以暴露多长时间
-    ///
-    /// - Parameters:
-    ///   - currentDose: 当前累积剂量（%）
-    ///   - doseRate: 剂量率（%/小时）
-    /// - Returns: 剩余时间（小时），如果已超标则返回nil
-    ///
-    /// **使用示例**：
-    /// ```swift
-    /// if let time = manager.calculateRemainingAllowedTime(currentDose: 75.0, doseRate: 25.0) {
-    ///     print("剩余允许暴露时间: \(time)小时")
-    /// }
-    /// ```
-    func calculateRemainingAllowedTime(currentDose: Double, doseRate: Double) -> Double? {
-        return predictTimeToFullDose(currentDose: currentDose, doseRate: doseRate)
-    }
+    // MARK: - 噪音测量计功能（公共API）
     
     /// 获取完整的噪声剂量数据
     ///
     /// 返回包含剂量、TWA、预测时间等完整信息的数据对象
+    /// 这是噪音测量计最主要的API方法
     ///
     /// - Parameter standard: 噪声限值标准，默认使用当前设置的标准
     /// - Returns: NoiseDoseData对象
     ///
     /// **包含的数据**：
-    /// - 剂量百分比
-    /// - 剂量率
-    /// - TWA值
+    /// - 剂量百分比（%）
+    /// - 剂量率（%/小时）
+    /// - TWA值（dB）
     /// - 是否超标
-    /// - 限值余量
-    /// - 预测时间
+    /// - 限值余量（dB）
+    /// - 预测达标时间（小时）
+    /// - 剩余允许时间（小时）
     /// - 风险等级
     ///
     /// **使用示例**：
@@ -1678,13 +1551,14 @@ class DecibelMeterManager: NSObject {
     /// 生成包含所有关键数据的完整报告，用于法规符合性评估
     ///
     /// - Parameter standard: 噪声限值标准
-    /// - Returns: NoiseDosimeterReport对象
+    /// - Returns: NoiseDosimeterReport对象，如果未开始测量则返回nil
     ///
     /// **使用示例**：
     /// ```swift
-    /// let report = manager.generateNoiseDosimeterReport(standard: .osha)
-    /// if let json = report.toJSON() {
-    ///     // 保存或分享报告
+    /// if let report = manager.generateNoiseDosimeterReport(standard: .osha) {
+    ///     if let json = report.toJSON() {
+    ///         // 保存或分享报告
+    ///     }
     /// }
     /// ```
     func generateNoiseDosimeterReport(standard: NoiseStandard? = nil) -> NoiseDosimeterReport? {
@@ -1714,6 +1588,107 @@ class DecibelMeterManager: NSObject {
                 l90: statistics?.l90Decibel ?? 0.0
             )
         )
+    }
+    
+    // MARK: - 噪音测量计私有计算方法
+    
+    /// 计算TWA（时间加权平均值）- 私有方法
+    ///
+    /// 根据LEQ和测量时长计算8小时时间加权平均值
+    /// 此方法为内部计算使用，外部通过getNoiseDoseData()获取TWA值
+    ///
+    /// - Parameters:
+    ///   - leq: 等效连续声级（dB）
+    ///   - duration: 实际测量时长（秒）
+    ///   - standardWorkDay: 标准工作日时长（小时），默认8小时
+    /// - Returns: TWA值（dB）
+    ///
+    /// **计算公式**：
+    /// ```
+    /// TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
+    /// ```
+    private func calculateTWA(leq: Double, duration: TimeInterval, standardWorkDay: Double = 8.0) -> Double {
+        let exposureHours = duration / 3600.0  // 转换为小时
+        
+        // TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
+        let energyFraction = (exposureHours / standardWorkDay) * pow(10.0, leq / 10.0)
+        let twa = 10.0 * log10(energyFraction)
+        
+        return twa
+    }
+    
+    /// 计算噪声剂量（Dose）- 私有方法
+    ///
+    /// 根据TWA计算噪声剂量百分比
+    /// 此方法为内部计算使用，外部通过getNoiseDoseData()获取剂量值
+    ///
+    /// - Parameters:
+    ///   - twa: 时间加权平均值（dB）
+    ///   - standard: 噪声限值标准
+    /// - Returns: 噪声剂量百分比（%）
+    ///
+    /// **计算公式**：
+    /// ```
+    /// Dose = 100 × 2^((TWA - CriterionLevel) / ExchangeRate)
+    /// ```
+    private func calculateNoiseDose(twa: Double, standard: NoiseStandard) -> Double {
+        let criterionLevel = standard.criterionLevel
+        let exchangeRate = standard.exchangeRate
+        
+        // Dose = 100 × 2^((TWA - 85) / ExchangeRate)
+        let dose = 100.0 * pow(2.0, (twa - criterionLevel) / exchangeRate)
+        
+        return dose
+    }
+    
+    /// 计算剂量率（Dose Rate）- 私有方法
+    ///
+    /// 计算单位时间内的剂量累积速率
+    /// 此方法为内部计算使用，外部通过getNoiseDoseData()获取剂量率
+    ///
+    /// - Parameters:
+    ///   - currentDose: 当前累积剂量（%）
+    ///   - duration: 已暴露时长（秒）
+    /// - Returns: 剂量率（%/小时）
+    ///
+    /// **计算公式**：
+    /// ```
+    /// Dose Rate = Current Dose / Elapsed Time (hours)
+    /// ```
+    private func calculateDoseRate(currentDose: Double, duration: TimeInterval) -> Double {
+        let exposureHours = duration / 3600.0
+        guard exposureHours > 0 else { return 0.0 }
+        
+        return currentDose / exposureHours
+    }
+    
+    /// 预测达到100%剂量的时间 - 私有方法
+    ///
+    /// 基于当前剂量率预测何时达到100%剂量
+    /// 此方法为内部计算使用，外部通过getNoiseDoseData()获取预测时间
+    ///
+    /// - Parameters:
+    ///   - currentDose: 当前累积剂量（%）
+    ///   - doseRate: 剂量率（%/小时）
+    /// - Returns: 预测时间（小时），如果已超过100%或剂量率为0则返回nil
+    private func predictTimeToFullDose(currentDose: Double, doseRate: Double) -> Double? {
+        guard doseRate > 0, currentDose < 100.0 else { return nil }
+        
+        let remainingDose = 100.0 - currentDose
+        return remainingDose / doseRate
+    }
+    
+    /// 计算剩余允许暴露时间 - 私有方法
+    ///
+    /// 计算在不超过100%剂量的前提下，还可以暴露多长时间
+    /// 此方法为内部计算使用，外部通过getNoiseDoseData()获取剩余时间
+    ///
+    /// - Parameters:
+    ///   - currentDose: 当前累积剂量（%）
+    ///   - doseRate: 剂量率（%/小时）
+    /// - Returns: 剩余时间（小时），如果已超标则返回nil
+    private func calculateRemainingAllowedTime(currentDose: Double, doseRate: Double) -> Double? {
+        return predictTimeToFullDose(currentDose: currentDose, doseRate: doseRate)
     }
     
     /// 计算统计指标
