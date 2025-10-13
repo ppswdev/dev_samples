@@ -4,20 +4,43 @@
 //
 //  Created by xiaopin on 2025/1/23.
 //
+//  本文件定义了分贝测量仪的基础数据模型
+//  包括测量结果、统计指标、测量会话、校准配置和导出配置
+//
 
 import Foundation
 
 // MARK: - 测量结果数据模型
 
 /// 分贝测量结果
+///
+/// 表示单次分贝测量的完整结果，包含原始值、各种权重值、校准值和频谱数据
+/// 这是最基础的数据单元，每次音频缓冲区处理都会生成一个测量结果
+///
+/// **符合标准**：IEC 61672-1
 struct DecibelMeasurement: Codable, Identifiable {
+    /// 唯一标识符
     let id = UUID()
+    
+    /// 测量时间戳
     let timestamp: Date
+    
+    /// 原始分贝值（dB），未应用任何权重
     let rawDecibel: Double
+    
+    /// A权重分贝值（dB），应用A权重后的值
     let aWeightedDecibel: Double
+    
+    /// Fast时间权重分贝值（dB）
     let fastDecibel: Double
+    
+    /// Slow时间权重分贝值（dB）
     let slowDecibel: Double
+    
+    /// 校准后的分贝值（dB），应用了频率权重、时间权重和校准偏移
     let calibratedDecibel: Double
+    
+    /// 频率频谱数据数组，用于频谱分析图
     let frequencySpectrum: [Double]
     
     /// 获取主要显示的分贝值
@@ -75,27 +98,61 @@ struct DecibelMeasurement: Codable, Identifiable {
 // MARK: - 统计指标数据模型
 
 /// 分贝统计指标
+///
+/// 包含完整的统计分析结果，用于评估噪声特性和暴露水平
+/// 符合 ISO 1996-1 和 IEC 61672-1 标准的统计分析要求
+///
+/// **包含的指标**：
+/// - 基本统计：AVG、MIN、MAX、PEAK
+/// - 等效连续声级：LEQ
+/// - 百分位数：L10、L50、L90
+/// - 标准偏差
 struct DecibelStatistics: Codable, Identifiable {
+    /// 唯一标识符
     let id = UUID()
+    
+    /// 统计生成时间戳
     let timestamp: Date
+    
+    /// 测量持续时间（秒）
     let measurementDuration: TimeInterval
+    
+    /// 样本数量（测量次数）
     let sampleCount: Int
     
-    // 基本统计指标
-    let avgDecibel: Double      // AVG - 平均值
-    let minDecibel: Double      // MIN - 最小值
-    let maxDecibel: Double      // MAX - 最大值
-    let peakDecibel: Double     // PEAK - 峰值
+    // MARK: 基本统计指标
     
-    // 等效连续声级
-    let leqDecibel: Double      // Leq - 等效连续声级
+    /// AVG - 算术平均值（dB）
+    let avgDecibel: Double
     
-    // 百分位数统计
-    let l10Decibel: Double      // L10 - 超过10%时间的声级
-    let l50Decibel: Double      // L50 - 超过50%时间的声级（中位数）
-    let l90Decibel: Double      // L90 - 超过90%时间的声级
+    /// MIN - 最小值（dB），应用时间权重
+    let minDecibel: Double
     
-    // 标准偏差
+    /// MAX - 最大值（dB），应用时间权重
+    let maxDecibel: Double
+    
+    /// PEAK - 峰值（dB），不应用时间权重，表示瞬时峰值
+    let peakDecibel: Double
+    
+    // MARK: 等效连续声级
+    
+    /// Leq - 等效连续声级（dB），能量平均值，符合ISO 1996-1标准
+    let leqDecibel: Double
+    
+    // MARK: 百分位数统计
+    
+    /// L10 - 超过10%时间的声级（dB），表示噪声峰值特征
+    let l10Decibel: Double
+    
+    /// L50 - 超过50%时间的声级（dB），即中位数
+    let l50Decibel: Double
+    
+    /// L90 - 超过90%时间的声级（dB），表示背景噪声水平
+    let l90Decibel: Double
+    
+    // MARK: 标准偏差
+    
+    /// 标准偏差（dB），表示数据的离散程度
     let standardDeviation: Double
     
     /// 获取统计摘要
