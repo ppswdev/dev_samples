@@ -182,6 +182,22 @@ struct NoiseDoseData: Codable {
         }
         return doseData
     }
+    
+    /// 转换为Map格式
+    func toMap() -> [String: Any] {
+        return [
+            "dosePercentage": dosePercentage,
+            "doseRate": doseRate,
+            "twa": twa,
+            "duration": duration,
+            "standard": standard.rawValue,
+            "isExceeding": isExceeding,
+            "limitMargin": limitMargin,
+            "predictedTimeToFullDose": predictedTimeToFullDose as Any,
+            "remainingAllowedTime": remainingAllowedTime as Any,
+            "riskLevel": riskLevel.rawValue
+        ]
+    }
 }
 
 /// 风险等级
@@ -427,6 +443,22 @@ struct LimitComparisonResult: Codable {
             return nil
         }
         return result
+    }
+    
+    /// 转换为Map格式
+    func toMap() -> [String: Any] {
+        return [
+            "standard": standard.rawValue,
+            "currentTWA": currentTWA,
+            "twaLimit": twaLimit,
+            "currentDose": currentDose,
+            "isExceeding": isExceeding,
+            "isActionLevelReached": isActionLevelReached,
+            "limitMargin": limitMargin,
+            "doseMargin": doseMargin,
+            "riskLevel": riskLevel.rawValue,
+            "recommendations": recommendations
+        ]
     }
 }
 
