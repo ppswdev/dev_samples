@@ -343,30 +343,13 @@ class DecibelMeterViewModel: ObservableObject {
             }
         }
         
-        // 分贝值更新回调
-        decibelManager.onDecibelUpdate = { [weak self] newDecibel in
-            self?.currentDecibel = newDecibel
-        }
-        
         // 测量数据更新回调
         decibelManager.onMeasurementUpdate = { [weak self] measurement in
             self?.currentMeasurement = measurement
         }
         
-        // 统计信息更新回调
-        decibelManager.onStatisticsUpdate = { [weak self] current, max, min in
-            Task { @MainActor in
-                self?.currentDecibel = current
-                // 只在已经开始测量后更新统计值
-                if self?.hasStartedMeasurement == true {
-                    self?.maxDecibel = max
-                    self?.minDecibel = min
-                }
-            }
-        }
-        
-        // 高级统计信息更新回调
-        decibelManager.onAdvancedStatisticsUpdate = { [weak self] current, peak, max, min in
+        // 分贝计数据更新回调
+        decibelManager.onMeterDataUpdate = { [weak self] current, peak, max, min, leq in
             Task { @MainActor in
                 self?.currentDecibel = current
                 // 只在已经开始测量后更新统计值
@@ -374,6 +357,7 @@ class DecibelMeterViewModel: ObservableObject {
                     self?.peakDecibel = peak
                     self?.maxDecibel = max
                     self?.minDecibel = min
+                    self?.leqDecibel = leq
                 }
             }
         }
