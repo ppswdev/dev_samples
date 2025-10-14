@@ -500,3 +500,166 @@ struct ReportStatistics: Codable {
     let l90: Double
 }
 
+// MARK: - 允许暴露时长表
+
+/// 允许暴露时长表项
+///
+/// 表示特定声级的暴露时长信息
+/// 符合 NIOSH、OSHA、GBZ 标准的暴露时长计算要求
+///
+/// **属性说明**：
+/// - `soundLevel`: 声级（dB）
+/// - `allowedDuration`: 允许暴露时长（秒），根据标准计算
+/// - `accumulatedDuration`: 累计达标时长（秒），实际测量中在该声级范围内的累计暴露时间
+/// - `currentLevelDose`: 当前声级剂量百分比（%），计算公式：(累计时长 / 允许时长) × 100%
+///
+/// **计算公式**：
+/// ```
+/// 允许时长 = 8小时 × 2^((基准限值 - 声级) / 交换率)
+/// 剂量 = (累计时长 / 允许时长) × 100%
+/// ```
+struct PermissibleExposureDuration: Codable, Identifiable {
+    /// 唯一标识符
+    let id = UUID()
+    
+    /// 声级（dB）
+    let soundLevel: Double
+    
+    /// 允许暴露时长（秒）
+    /// 根据标准计算：T = 8小时 × 2^((基准限值 - 声级) / 交换率)
+    let allowedDuration: TimeInterval
+    
+    /// 累计达标时长（秒）
+    /// 实际测量中在该声级范围内的累计暴露时间
+    let accumulatedDuration: TimeInterval
+    
+    /// 是否为天花板限值
+    let isCeilingLimit: Bool
+    
+    /// 当前声级剂量百分比（%）
+    /// 计算公式：(累计时长 / 允许时长) × 100%
+    var currentLevelDose: Double {
+        guard allowedDuration > 0 else { return 0.0 }
+        return (accumulatedDuration / allowedDuration) * 100.0
+    }
+    
+    /// 是否超标
+    var isExceeding: Bool {
+        return accumulatedDuration > allowedDuration
+    }
+    
+    /// 剩余允许时长（秒）
+    var remainingDuration: TimeInterval {
+        return max(0, allowedDuration - accumulatedDuration)
+    }
+    
+    /// 格式化的允许时长显示
+    var formattedAllowedDuration: String {
+        return formatDuration(allowedDuration)
+    }
+    
+    /// 格式化的累计时长显示
+    var formattedAccumulatedDuration: String {
+        return formatDuration(accumulatedDuration)
+    }
+    
+    /// 格式化的剩余时长显示
+    var formattedRemainingDuration: String {
+        return formatDuration(remainingDuration)
+    }
+    
+    /// 格式化时长（秒转换为时:分:秒或分:秒）
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        let secs = Int(seconds) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else if minutes > 0 {
+            return String(format: "%d:%02d", minutes, secs)
+        } else {
+            return String(format: "%d秒", secs)
+        }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case soundLevel, allowedDuration, accumulatedDuration, isCeilingLimit
+    }
+}
+
+/// 允许暴露时长表
+///
+/// 包含所有声级的暴露时长信息列表
+/// 用于显示和分析不同声级下的暴露情况
+///
+/// **用途**：
+/// - 显示每个声级的允许暴露时间
+/// - 统计实际累计暴露时间
+/// - 计算每个声级的剂量贡献
+/// - 评估总体暴露风险
+///
+/// **使用示例**：
+/// ```swift
+/// let table = manager.getPermissibleExposureDurationTable(standard: .niosh)
+/// print("总剂量: \(table.totalDose)%")
+/// for duration in table.durations {
+///     print("\(duration.soundLevel) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration)")
+/// }
+/// ```
+struct PermissibleExposureDurationTable: Codable {
+    /// 使用的标准
+    let standard: NoiseStandard
+    
+    /// 基准限值（dB）
+    let criterionLevel: Double
+    
+    /// 交换率（dB）
+    let exchangeRate: Double
+    
+    /// 天花板限值（dB）
+    let ceilingLimit: Double
+    
+    /// 所有声级的暴露时长列表
+    let durations: [PermissibleExposureDuration]
+    
+    /// 总剂量百分比（%）
+    /// 所有声级剂量的累加
+    var totalDose: Double {
+        return durations.reduce(0.0) { $0 + $1.currentLevelDose }
+    }
+    
+    /// 超标的声级数量
+    var exceedingLevelsCount: Int {
+        return durations.filter { $0.isExceeding }.count
+    }
+    
+    /// 有暴露记录的声级数量
+    var exposedLevelsCount: Int {
+        return durations.filter { $0.accumulatedDuration > 0 }.count
+    }
+    
+    /// 转换为JSON字符串
+    func toJSON() -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        
+        guard let data = try? encoder.encode(self),
+              let jsonString = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return jsonString
+    }
+    
+    /// 从JSON字符串创建
+    static func fromJSON(_ jsonString: String) -> PermissibleExposureDurationTable? {
+        let decoder = JSONDecoder()
+        
+        guard let data = jsonString.data(using: .utf8),
+              let table = try? decoder.decode(PermissibleExposureDurationTable.self, from: data) else {
+            return nil
+        }
+        return table
+    }
+}
+

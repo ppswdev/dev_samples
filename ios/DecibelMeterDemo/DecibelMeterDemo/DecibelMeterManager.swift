@@ -1590,6 +1590,104 @@ class DecibelMeterManager: NSObject {
         )
     }
     
+    /// 获取允许暴露时长表
+    ///
+    /// 根据当前测量数据生成允许暴露时长表，包含每个声级的累计暴露时间和剂量
+    /// 该表格展示了不同声级下的允许暴露时间、实际累计时间和剂量贡献
+    ///
+    /// - Parameter standard: 噪声限值标准，默认使用当前设置的标准
+    /// - Returns: PermissibleExposureDurationTable对象
+    ///
+    /// **表格内容**：
+    /// - 声级列表：从基准限值开始，按交换率递增至天花板限值
+    /// - 允许时长：根据标准计算的最大允许暴露时间
+    /// - 累计时长：实际测量中在该声级范围内的累计时间
+    /// - 声级剂量：该声级的剂量贡献百分比
+    ///
+    /// **计算原理**：
+    /// ```
+    /// 允许时长 = 8小时 × 2^((基准限值 - 声级) / 交换率)
+    /// 声级剂量 = (累计时长 / 允许时长) × 100%
+    /// 总剂量 = Σ 各声级剂量
+    /// ```
+    ///
+    /// **使用示例**：
+    /// ```swift
+    /// let table = manager.getPermissibleExposureDurationTable(standard: .niosh)
+    /// print("总剂量: \(table.totalDose)%")
+    /// print("超标声级数: \(table.exceedingLevelsCount)")
+    /// for duration in table.durations {
+    ///     print("\(duration.soundLevel) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) (\(String(format: "%.1f", duration.currentLevelDose))%)")
+    /// }
+    /// ```
+    func getPermissibleExposureDurationTable(standard: NoiseStandard? = nil) -> PermissibleExposureDurationTable {
+        let useStandard = standard ?? currentNoiseStandard
+        let criterionLevel = useStandard.twaLimit
+        let exchangeRate = useStandard.exchangeRate
+        let ceilingLimit = 115.0  // 通用天花板限值
+        
+        // 生成声级列表（从基准限值开始，按交换率递增）
+        var soundLevels: [Double] = []
+        var currentLevel = criterionLevel
+        while currentLevel <= ceilingLimit {
+            soundLevels.append(currentLevel)
+            currentLevel += exchangeRate
+        }
+        
+        // 计算每个声级的累计暴露时间
+        // 使用字典存储每个声级范围的累计时间
+        var levelDurations: [Double: TimeInterval] = [:]
+        
+        for measurement in measurementHistory {
+            let level = measurement.calibratedDecibel
+            
+            // 找到小于或等于当前分贝值的最接近的限值
+            // 例如：87dB 归类到 85dB，92dB 归类到 91dB
+            var targetLevel: Double? = nil
+            
+            // 从高到低遍历声级列表，找到第一个小于或等于当前分贝值的限值
+            for i in stride(from: soundLevels.count - 1, through: 0, by: -1) {
+                if level >= soundLevels[i] {
+                    targetLevel = soundLevels[i]
+                    break
+                }
+            }
+            
+            // 如果找到了目标限值，累加时间
+            if let targetLevel = targetLevel {
+                levelDurations[targetLevel, default: 0.0] += 1.0
+            }
+        }
+        
+        // 生成表项
+        let durations = soundLevels.map { soundLevel -> PermissibleExposureDuration in
+            // 计算允许时长：T = 8小时 × 2^((基准限值 - 声级) / 交换率)
+            let allowedHours = 8.0 * pow(2.0, (criterionLevel - soundLevel) / exchangeRate)
+            let allowedDuration = allowedHours * 3600.0  // 转换为秒
+            
+            // 获取累计时长
+            let accumulatedDuration = levelDurations[soundLevel] ?? 0.0
+            
+            // 判断是否为天花板限值
+            let isCeilingLimit = soundLevel >= ceilingLimit
+            
+            return PermissibleExposureDuration(
+                soundLevel: soundLevel,
+                allowedDuration: allowedDuration,
+                accumulatedDuration: accumulatedDuration,
+                isCeilingLimit: isCeilingLimit
+            )
+        }
+        
+        return PermissibleExposureDurationTable(
+            standard: useStandard,
+            criterionLevel: criterionLevel,
+            exchangeRate: exchangeRate,
+            ceilingLimit: ceilingLimit,
+            durations: durations
+        )
+    }
+    
     // MARK: - 噪音测量计私有计算方法
     
     /// 计算TWA（时间加权平均值）- 私有方法
