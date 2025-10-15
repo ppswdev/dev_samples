@@ -36,7 +36,7 @@ func getMeasurementDuration() -> TimeInterval
 ### **3. 获取当前频率权重**
 
 ```swift
-func getCurrentFrequencyWeighting() -> FrequencyWeighting
+func getDecibelMeterFrequencyWeighting() -> FrequencyWeighting
 ```
 
 **返回值**：`.aWeight`、`.bWeight`、`.cWeight`、`.zWeight`、`.ituR468`

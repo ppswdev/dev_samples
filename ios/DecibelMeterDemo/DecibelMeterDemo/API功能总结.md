@@ -9,7 +9,7 @@
 | `getCurrentState()` | `MeasurementState` | 当前测量状态 |
 | `getFormattedMeasurementDuration()` | `String` | 测量时长（HH:mm:ss） |
 | `getMeasurementDuration()` | `TimeInterval` | 测量时长（秒） |
-| `getCurrentFrequencyWeighting()` | `FrequencyWeighting` | 当前频率权重 |
+| `getDecibelMeterFrequencyWeighting()` | `FrequencyWeighting` | 当前频率权重 |
 | `getCurrentTimeWeighting()` | `TimeWeighting` | 当前时间权重 |
 | `getWeightingDisplayText()` | `String` | 权重简写（dB(A)F） |
 | `getCalibrationOffset()` | `Double` | 校准偏移值 |
@@ -27,6 +27,7 @@
 | `getTimeWeightingsList()` | `WeightingOptionsList` | 所有时间权重列表 |
 
 **支持的频率权重**：
+
 - ✅ dB-A (A权重)
 - ✅ dB-B (B权重)
 - ✅ dB-C (C权重)
@@ -34,6 +35,7 @@
 - ✅ ITU-R 468
 
 **支持的时间权重**：
+
 - ✅ F (Fast - 快响应)
 - ✅ S (Slow - 慢响应)
 - ✅ I (Impulse - 脉冲响应)
@@ -49,29 +51,34 @@
 | `getLEQTrendChartData(interval:)` | `LEQTrendChartData` | LEQ趋势图数据 |
 
 #### **3.1 时间历程图（实时分贝曲线）**
+
 - ✅ 横轴：时间（最近60秒或可配置）
 - ✅ 纵轴：分贝值（0-140 dB）
 - ✅ 数据源：measurementHistory
 - ✅ 支持JSON转换
 
 #### **3.2 实时指示器**
+
 - ✅ 当前分贝值
 - ✅ LEQ、MIN、MAX、PEAK数值
 - ✅ 频率权重和时间权重显示（dB(A)F格式）
 - ✅ 支持JSON转换
 
 #### **3.3 频谱分析图**
+
 - ✅ 支持1/1倍频程（10个频点）
 - ✅ 支持1/3倍频程（30个频点）
 - ✅ 数据源：frequencySpectrum数组
 - ✅ 支持JSON转换
 
 #### **3.4 统计分布图**
+
 - ✅ L10、L50、L90分析
 - ✅ 数据源：calculateStatistics方法
 - ✅ 支持JSON转换
 
 #### **3.5 LEQ趋势图**
+
 - ✅ LEQ随时间变化
 - ✅ 累积LEQ趋势
 - ✅ 可配置采样间隔
@@ -89,12 +96,14 @@
 ### **5. 数据模型（支持JSON转换）**
 
 所有数据模型都实现了：
+
 - ✅ `Codable` 协议
 - ✅ `Identifiable` 协议
 - ✅ `toJSON()` 方法 - 转换为JSON字符串
 - ✅ `fromJSON(_:)` 静态方法 - 从JSON恢复
 
 **数据模型列表**：
+
 1. ✅ `WeightingOption` - 权重选项
 2. ✅ `WeightingOptionsList` - 权重列表
 3. ✅ `TimeHistoryDataPoint` - 时间历程数据点
@@ -112,36 +121,44 @@
 ## 📊 **图表数据详细说明**
 
 ### **1. 时间历程图数据**
+
 ```swift
 let data = manager.getTimeHistoryChartData(timeRange: 60.0)
 ```
+
 - **用途**：显示实时分贝变化曲线
 - **数据点**：包含时间戳、分贝值、权重类型
 - **时间范围**：可配置（默认60秒）
 - **自动过滤**：只返回指定时间范围内的数据
 
 ### **2. 实时指示器数据**
+
 ```swift
 let data = manager.getRealTimeIndicatorData()
 ```
+
 - **用途**：显示当前所有关键指标
 - **包含**：当前值、LEQ、MIN、MAX、PEAK、权重显示
 - **更新频率**：实时
 - **未初始化处理**：MIN/MAX/PEAK < 0 时返回0.0
 
 ### **3. 频谱分析图数据**
+
 ```swift
 let data = manager.getSpectrumChartData(bandType: "1/3")
 ```
+
 - **用途**：显示各频段的声压级
 - **1/1倍频程**：10个标准频点（31.5Hz - 16kHz）
 - **1/3倍频程**：30个标准频点（25Hz - 20kHz）
 - **数据来源**：实际频谱数据或基于权重的模拟数据
 
 ### **4. 统计分布图数据**
+
 ```swift
 let data = manager.getStatisticalDistributionChartData()
 ```
+
 - **用途**：显示声级的统计分布
 - **包含**：L10、L50、L90等百分位数
 - **数据点**：9个百分位数（10%, 20%, ..., 90%）
@@ -151,9 +168,11 @@ let data = manager.getStatisticalDistributionChartData()
   - L90：背景噪声
 
 ### **5. LEQ趋势图数据**
+
 ```swift
 let data = manager.getLEQTrendChartData(interval: 10.0)
 ```
+
 - **用途**：显示LEQ随时间的变化趋势
 - **采样间隔**：可配置（默认10秒）
 - **包含**：时段LEQ和累积LEQ
@@ -166,6 +185,7 @@ let data = manager.getLEQTrendChartData(interval: 10.0)
 ### **所有数据模型都支持双向JSON转换**
 
 #### **转换为JSON**
+
 ```swift
 let data = manager.getTimeHistoryChartData()
 if let jsonString = data.toJSON() {
@@ -175,6 +195,7 @@ if let jsonString = data.toJSON() {
 ```
 
 #### **从JSON恢复**
+
 ```swift
 let jsonString = "..." // JSON字符串
 if let data = TimeHistoryChartData.fromJSON(jsonString) {
@@ -183,6 +204,7 @@ if let data = TimeHistoryChartData.fromJSON(jsonString) {
 ```
 
 #### **支持的用途**
+
 - ✅ 数据导出
 - ✅ 数据分享
 - ✅ 数据存储
@@ -194,6 +216,7 @@ if let data = TimeHistoryChartData.fromJSON(jsonString) {
 ## ⚙️ **设置功能**
 
 ### **1. 权重切换（继续录制）**
+
 ```swift
 // 切换频率权重
 manager.setFrequencyWeighting(.cWeight)
@@ -206,11 +229,13 @@ let newDisplay = manager.getWeightingDisplayText() // "dB(C)S"
 ```
 
 **特点**：
+
 - ✅ 切换时继续录制
 - ✅ 实时更新显示
 - ✅ 不影响数据连续性
 
 ### **2. 校准功能**
+
 ```swift
 // 设置校准偏移
 manager.setCalibrationOffset(2.5)
@@ -220,11 +245,13 @@ let offset = manager.getCalibrationOffset()
 ```
 
 ### **3. 重置功能**
+
 ```swift
 manager.resetAllData()
 ```
 
 **重置内容**：
+
 - ✅ 停止测量
 - ✅ 清除历史数据
 - ✅ 重置统计值（MIN=-1, MAX=-1, PEAK=-1, LEQ=0）
@@ -236,6 +263,7 @@ manager.resetAllData()
 ## 📚 **文件清单**
 
 ### **核心文件**
+
 1. ✅ `DecibelMeterManager.swift` - 核心管理类（979行）
 2. ✅ `DecibelDataModels.swift` - 基础数据模型（356行）
 3. ✅ `ChartDataModels.swift` - 图表数据模型（新增，270行）
@@ -243,6 +271,7 @@ manager.resetAllData()
 5. ✅ `ContentView.swift` - UI视图（658行）
 
 ### **文档文件**
+
 1. ✅ `DecibelMeterManager_API文档.md` - API完整文档
 2. ✅ `API使用示例.swift` - 代码使用示例
 3. ✅ `声学与分贝测量专业技术理论.md` - 理论基础
@@ -257,24 +286,28 @@ manager.resetAllData()
 ## 🎯 **API设计特点**
 
 ### **1. 完整性**
+
 - ✅ 覆盖所有需求的获取方法
 - ✅ 支持所有权重类型
 - ✅ 支持所有图表类型
 - ✅ 完整的设置和重置功能
 
 ### **2. 易用性**
+
 - ✅ 方法命名清晰
 - ✅ 参数合理默认值
 - ✅ 返回值类型明确
 - ✅ 支持链式调用
 
 ### **3. 专业性**
+
 - ✅ 符合IEC 61672-1标准
 - ✅ 符合ISO 1996-1标准
 - ✅ 符合专业声级计设计
 - ✅ 权重显示格式标准化
 
 ### **4. 扩展性**
+
 - ✅ 所有数据模型支持JSON转换
 - ✅ 图表数据可配置参数
 - ✅ 易于添加新的图表类型
@@ -304,6 +337,7 @@ manager.resetAllData()
 ## 🛠️ **技术实现**
 
 ### **1. 数据流**
+
 ```
 音频输入 → AVAudioEngine → 
 processAudioBuffer → 
@@ -315,6 +349,7 @@ JSON/UI显示
 ```
 
 ### **2. 状态管理**
+
 ```
 idle（停止） ⇄ measuring（测量中）
      ↓
@@ -322,6 +357,7 @@ error（错误）
 ```
 
 ### **3. 权重处理**
+
 ```
 原始音频 → 
 频率权重（A/B/C/Z/ITU） → 
@@ -335,6 +371,7 @@ error（错误）
 ## 📝 **使用建议**
 
 ### **1. 基本使用流程**
+
 ```swift
 // 1. 获取管理器实例
 let manager = DecibelMeterManager.shared
@@ -358,6 +395,7 @@ if let json = chartData.toJSON() {
 ```
 
 ### **2. 实时更新建议**
+
 ```swift
 // 每1秒更新指示器
 Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
@@ -373,6 +411,7 @@ Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
 ```
 
 ### **3. 权重切换建议**
+
 ```swift
 // 切换权重时继续录制（符合专业标准）
 manager.setFrequencyWeighting(.cWeight)
@@ -406,6 +445,7 @@ manager.setTimeWeighting(.slow)
 ## 🎉 **总结**
 
 ### **完成的功能**
+
 - ✅ **11个状态获取方法**
 - ✅ **2个权重列表方法**
 - ✅ **5个图表数据方法**
@@ -415,12 +455,14 @@ manager.setTimeWeighting(.slow)
 - ✅ **专业标准符合**
 
 ### **API特点**
+
 - ✅ **完整**：覆盖所有需求
 - ✅ **易用**：方法清晰、参数合理
 - ✅ **专业**：符合国际标准
 - ✅ **灵活**：支持多种配置
 
 ### **下一步建议**
+
 - 可以开始实现UI图表显示
 - 可以使用Swift Charts框架
 - 可以添加数据导出功能

@@ -31,7 +31,7 @@ class DecibelMeterAPIExample {
         print("测量时长: \(formattedDuration) (\(duration)秒)")
         
         // 1.3 获取权重信息
-        let freqWeighting = manager.getCurrentFrequencyWeighting()
+        let freqWeighting = manager.getDecibelMeterFrequencyWeighting()
         let timeWeighting = manager.getCurrentTimeWeighting()
         let weightingText = manager.getWeightingDisplayText()
         print("频率权重: \(freqWeighting)")
@@ -160,7 +160,7 @@ class DecibelMeterAPIExample {
         
         // 4.1 设置频率权重
         print("\n设置频率权重为A权重:")
-        manager.setFrequencyWeighting(.aWeight)
+        manager.setDecibelMeterFrequencyWeighting(.aWeight)
         print("当前权重: \(manager.getWeightingDisplayText())")
         
         // 4.2 设置时间权重
@@ -210,7 +210,7 @@ class DecibelMeterAPIExample {
         
         // 5.5 切换权重
         print("\n5. 切换权重为C权重+Fast:")
-        manager.setFrequencyWeighting(.cWeight)
+        manager.setDecibelMeterFrequencyWeighting(.cWeight)
         manager.setTimeWeighting(.fast)
         print("新权重: \(manager.getWeightingDisplayText())")
         

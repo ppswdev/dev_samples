@@ -153,12 +153,7 @@ struct DecibelDisplayView: View {
             Text(String(format: "%.1f", decibel))
                 .font(.system(size: 80, weight: .bold, design: .rounded))
                 .foregroundColor(decibelColor)
-            
-            // 单位（包含权重信息）
-            Text(weightedUnitDisplay)
-                .font(.title2)
-                .foregroundColor(.secondary)
-            
+
             // 等级描述
             if let measurement = measurement {
                 Text(measurement.levelDescription)
@@ -467,7 +462,7 @@ struct ControlButtonsView: View {
     }
 }
 
-// MARK: - 设置视图（占位符）
+// MARK: - 设置视图
 
 struct SettingsView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
@@ -475,22 +470,110 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("设置功能开发中...")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
+            VStack(spacing: 20) {
+                // 分贝计设置
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("分贝计设置")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("频率权重")
+                            Spacer()
+                            Text(viewModel.currentFrequencyWeighting.rawValue)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        
+                        HStack {
+                            Text("时间权重")
+                            Spacer()
+                            Text(viewModel.currentTimeWeighting.rawValue)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        
+                        HStack {
+                            Text("校准偏移")
+                            Spacer()
+                            Text(String(format: "%.1f dB", viewModel.getCalibrationOffset()))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                }
+                
+                // 噪音测量计设置
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("噪音测量计设置")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("频率权重")
+                            Spacer()
+                            Text("dB-A (锁定)")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        
+                        HStack {
+                            Text("噪声标准")
+                            Spacer()
+                            Text("OSHA")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                }
+                
+                // 应用信息
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("应用信息")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("版本")
+                            Spacer()
+                            Text("1.0.0")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        
+                        HStack {
+                            Text("开发者")
+                            Spacer()
+                            Text("xiaopin")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                }
                 
                 Spacer()
+                
+                // 操作
+                Button("重置所有数据") {
+                    viewModel.resetAllData()
+                }
+                .foregroundColor(.red)
+                .padding()
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                }
-            }
         }
     }
 }

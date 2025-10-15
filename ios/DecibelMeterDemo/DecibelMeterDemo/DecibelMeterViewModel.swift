@@ -227,7 +227,7 @@ class DecibelMeterViewModel: ObservableObject {
     /// ```
     func setFrequencyWeighting(_ weighting: FrequencyWeighting) {
         currentFrequencyWeighting = weighting
-        decibelManager.setFrequencyWeighting(weighting)
+        decibelManager.setDecibelMeterFrequencyWeighting(weighting)
     }
     
     /// 设置时间权重
@@ -349,7 +349,7 @@ class DecibelMeterViewModel: ObservableObject {
         }
         
         // 分贝计数据更新回调
-        decibelManager.onMeterDataUpdate = { [weak self] current, peak, max, min, leq in
+        decibelManager.onDecibelMeterDataUpdate = { [weak self] current, peak, max, min, leq in
             Task { @MainActor in
                 self?.currentDecibel = current
                 // 只在已经开始测量后更新统计值
@@ -362,8 +362,14 @@ class DecibelMeterViewModel: ObservableObject {
             }
         }
         
+        // 噪音测量计数据更新回调（暂时不处理，因为当前UI主要显示分贝计数据）
+        decibelManager.onNoiseMeterDataUpdate = { [weak self] current, peak, max, min, leq in
+            // 噪音测量计的数据更新可以在这里处理
+            // 目前主要用于后台计算，UI显示仍以分贝计为主
+        }
+        
         // 初始化当前设置
-        currentFrequencyWeighting = decibelManager.getCurrentFrequencyWeighting()
+        currentFrequencyWeighting = decibelManager.getDecibelMeterFrequencyWeighting()
         currentTimeWeighting = decibelManager.getCurrentTimeWeighting()
         
         // 监听应用生命周期
@@ -426,6 +432,63 @@ extension DecibelMeterViewModel {
         }
     }
     
+    /// 获取校准偏移值
+    func getCalibrationOffset() -> Double {
+        return decibelManager.getCalibrationOffset()
+    }
+    
+    // MARK: - 噪音测量计数据获取方法
+    
+    /// 获取噪音测量计实时LEQ值
+    func getNoiseMeterRealTimeLeq() -> Double {
+        return decibelManager.getNoiseMeterRealTimeLeq()
+    }
+    
+    /// 获取噪音测量计最小值
+    func getNoiseMeterMin() -> Double {
+        return decibelManager.getNoiseMeterMin()
+    }
+    
+    /// 获取噪音测量计最大值
+    func getNoiseMeterMax() -> Double {
+        return decibelManager.getNoiseMeterMax()
+    }
+    
+    /// 获取噪音测量计峰值
+    func getNoiseMeterPeak() -> Double {
+        return decibelManager.getNoiseMeterPeak()
+    }
+    
+    /// 获取噪音测量计频率时间权重简写文本
+    func getNoiseMeterWeightingDisplayText() -> String {
+        return decibelManager.getNoiseMeterWeightingDisplayText()
+    }
+    
+    /// 获取噪音剂量数据
+    func getNoiseDoseData() -> NoiseDoseData {
+        return decibelManager.getNoiseDoseData()
+    }
+    
+    /// 获取允许暴露时长表
+    func getPermissibleExposureDurationTable() -> PermissibleExposureDurationTable {
+        return decibelManager.getPermissibleExposureDurationTable()
+    }
+    
+    /// 设置当前噪声标准
+    func setCurrentNoiseStandard(_ standard: NoiseStandard) {
+        decibelManager.setNoiseStandard(standard)
+    }
+    
+    /// 获取当前噪声标准
+    func getCurrentNoiseStandard() -> NoiseStandard {
+        return decibelManager.getCurrentNoiseStandard()
+    }
+    
+    /// 获取频率时间权重显示文本
+    func getWeightingDisplayText() -> String {
+        return decibelManager.getDecibelMeterWeightingDisplayText()
+    }
+    
     /// 格式化时间间隔为时分秒格式
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
@@ -454,7 +517,7 @@ extension DecibelMeterViewModel {
     /// 更新统计信息
     private func updateStatistics() {
         // 实时更新LEQ值（不需要等待测量结束）
-        leqDecibel = decibelManager.getRealTimeLeq()
+        leqDecibel = decibelManager.getDecibelMeterRealTimeLeq()
         
         // 如果有完整统计信息，也更新它
         if let statistics = decibelManager.getCurrentStatistics() {
