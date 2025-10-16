@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import Charts
 
 struct DecibelMeterView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
@@ -42,6 +43,21 @@ struct DecibelMeterView: View {
                         
                         // 基础数据信息
                         DecibelBasicDataView(viewModel: viewModel)
+                        
+                        // 专业图表区域
+                        VStack(spacing: 20) {
+                            // 时间历程图 - 实时分贝曲线
+                            TimeHistoryChartView(viewModel: viewModel)
+                            
+//                            // 频谱分析图 - 1/1和1/3倍频程
+//                            SpectrumAnalysisChartView(viewModel: viewModel)
+//                            
+//                            // 统计分布图 - L10、L50、L90
+//                            StatisticalDistributionChartView(viewModel: viewModel)
+//                            
+//                            // LEQ趋势图 - LEQ随时间变化
+//                            LEQTrendChartView(viewModel: viewModel)
+                        }
                     }
                     .padding()
                     
@@ -371,6 +387,470 @@ struct DecibelDataItemView: View {
                         .foregroundColor(.secondary)
                 }
             }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - 专业图表视图
+
+/// 时间历程图视图 - 实时分贝曲线
+///
+/// 显示最近60秒的分贝变化曲线，符合 IEC 61672-1 标准的时间历程记录要求
+/// 横轴为时间，纵轴为分贝值，实时更新显示
+struct TimeHistoryChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题和权重信息
+            HStack {
+                Text("时间历程图")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text(viewModel.getWeightingDisplayText())
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
+                    LineMark(
+                        x: .value("时间", timeIntervalFromNow(dataPoint.timestamp)),
+                        y: .value("分贝", dataPoint.decibel)
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+            }
+            .frame(height: 200)
+            .chartXScale(domain: -60...0) // 明确X轴范围：-60到0秒（相对于现在）
+            .chartYScale(domain: 20...120) // 明确Y轴范围：20-120dB
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 10)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let timeValue = value.as(TimeInterval.self) {
+                        AxisValueLabel {
+                            Text(formatTimeAxis(timeValue))
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let decibelValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(decibelValue))dB")
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 图表信息
+            HStack {
+                Text("时间范围: 60秒")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("数据点: \(getChartData().dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getChartData() -> TimeHistoryChartData {
+        return viewModel.getTimeHistoryChartData(timeRange: 60.0)
+    }
+    
+    /// 计算时间戳相对于现在的时间间隔（秒）
+    private func timeIntervalFromNow(_ timestamp: Date) -> TimeInterval {
+        return timestamp.timeIntervalSinceNow
+    }
+    
+    /// 格式化时间轴标签
+    private func formatTimeAxis(_ timeInterval: TimeInterval) -> String {
+        let absTime = abs(timeInterval)
+        
+        if absTime < 60 {
+            return "\(Int(absTime))s"
+        } else if absTime < 3600 {
+            return "\(Int(absTime/60))m"
+        } else {
+            return "\(Int(absTime/3600))h"
+        }
+    }
+}
+
+/// 频谱分析图视图 - 1/1和1/3倍频程
+///
+/// 显示各频段的声压级分布，符合 IEC 61260-1 标准的倍频程分析要求
+/// 支持1/1倍频程（10个频点）和1/3倍频程（30个频点）切换显示
+struct SpectrumAnalysisChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    @State private var selectedBandType: String = "1/3"
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题和倍频程选择
+            HStack {
+                Text("频谱分析图")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Picker("倍频程", selection: $selectedBandType) {
+                    Text("1/3倍频程").tag("1/3")
+                    Text("1/1倍频程").tag("1/1")
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(width: 150)
+            }
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
+                    BarMark(
+                        x: .value("频率", dataPoint.frequency),
+                        y: .value("声压级", dataPoint.magnitude)
+                    )
+                    .foregroundStyle(.green)
+                }
+            }
+            .frame(height: 200)
+            .chartXScale(domain: 20...20000) // 明确X轴范围：20Hz-20kHz
+            .chartYScale(domain: 0...100) // 明确Y轴范围：0-100dB
+            .chartXScale(type: .log)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 1)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let freqValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text(formatFrequency(freqValue))
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let magnitudeValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(magnitudeValue))dB")
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.green.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 图表信息
+            HStack {
+                Text("频率范围: \(formatFrequency(getChartData().frequencyRange.min)) - \(formatFrequency(getChartData().frequencyRange.max))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("频点数: \(getChartData().dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.green.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getChartData() -> SpectrumChartData {
+        return viewModel.getSpectrumChartData(bandType: selectedBandType)
+    }
+    
+    private func formatFrequency(_ frequency: Double) -> String {
+        if frequency >= 1000 {
+            return "\(String(format: "%.1f", frequency/1000))k"
+        } else {
+            return "\(Int(frequency))"
+        }
+    }
+}
+
+/// 统计分布图视图 - L10、L50、L90
+///
+/// 显示声级的统计分布，分析噪声的统计特性
+/// 符合 ISO 1996-2 标准的统计分析要求
+struct StatisticalDistributionChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题
+            HStack {
+                Text("统计分布图")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("L10/L50/L90")
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
+                    BarMark(
+                        x: .value("百分位", dataPoint.percentile),
+                        y: .value("分贝", dataPoint.decibel)
+                    )
+                    .foregroundStyle(barColor(for: dataPoint.percentile))
+                    .annotation(position: .top) {
+                        Text(dataPoint.label)
+                            .font(.caption2)
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+            .frame(height: 200)
+            .chartXScale(domain: 0...100) // 明确X轴范围：0-100%
+            .chartYScale(domain: 20...120) // 明确Y轴范围：20-120dB
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 10)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let percentileValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(percentileValue))%")
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let decibelValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(decibelValue))dB")
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 关键指标显示
+            HStack(spacing: 20) {
+                StatisticItemView(
+                    label: "L10",
+                    value: String(format: "%.1f", getChartData().l10),
+                    description: "噪声峰值"
+                )
+                
+                StatisticItemView(
+                    label: "L50",
+                    value: String(format: "%.1f", getChartData().l50),
+                    description: "中位数"
+                )
+                
+                StatisticItemView(
+                    label: "L90",
+                    value: String(format: "%.1f", getChartData().l90),
+                    description: "背景噪声"
+                )
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getChartData() -> StatisticalDistributionChartData {
+        return viewModel.getStatisticalDistributionChartData()
+    }
+    
+    private func barColor(for percentile: Double) -> Color {
+        switch percentile {
+        case 10: return .red      // L90 - 背景噪声
+        case 50: return .orange   // L50 - 中位数
+        case 90: return .green    // L10 - 噪声峰值
+        default: return .gray
+        }
+    }
+}
+
+/// LEQ趋势图视图 - LEQ随时间变化
+///
+/// 显示LEQ随时间变化的趋势，用于职业健康监测和长期暴露评估
+/// 符合 ISO 1996-1 标准的等效连续声级计算要求
+struct LEQTrendChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题和当前LEQ值
+            HStack {
+                Text("LEQ趋势图")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("当前LEQ")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(String(format: "%.1f dB", getChartData().currentLeq))
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.purple)
+                }
+            }
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
+                    LineMark(
+                        x: .value("时间", dataPoint.timestamp),
+                        y: .value("LEQ", dataPoint.cumulativeLeq)
+                    )
+                    .foregroundStyle(.purple)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .symbol(Circle())
+                    .symbolSize(20)
+                }
+            }
+            .frame(height: 200)
+            .chartXScale(domain: 0...3600) // 明确X轴范围：0-3600秒（1小时）
+            .chartYScale(domain: 20...120) // 明确Y轴范围：20-120dB
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 60)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let timeValue = value.as(Date.self) {
+                        AxisValueLabel {
+                            Text(formatLEQTimeAxis(timeValue))
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let leqValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(leqValue))dB")
+                                .font(.caption)
+                            }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.purple.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 图表信息
+            HStack {
+                Text("测量时长: \(formatDuration(getChartData().timeRange))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("数据点: \(getChartData().dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.purple.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getChartData() -> LEQTrendChartData {
+        return viewModel.getLEQTrendChartData(interval: 10.0)
+    }
+    
+    private func formatLEQTimeAxis(_ date: Date) -> String {
+        let now = Date()
+        let timeDiff = now.timeIntervalSince(date)
+        
+        if timeDiff < 3600 {
+            return "\(Int(timeDiff/60))m"
+        } else {
+            return "\(Int(timeDiff/3600))h"
+        }
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = Int(duration) % 3600 / 60
+        
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
+    }
+}
+
+// MARK: - 辅助视图
+
+/// 统计指标项视图
+struct StatisticItemView: View {
+    let label: String
+    let value: String
+    let description: String
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Text(value)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            Text(description)
+                .font(.caption2)
+                .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
     }

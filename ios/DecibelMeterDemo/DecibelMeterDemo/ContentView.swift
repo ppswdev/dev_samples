@@ -316,36 +316,36 @@ struct EnhancedStatisticsView: View {
             // 第一行：当前值和Leq
             HStack(spacing: 30) {
                 StatisticItemView(
-                    title: "当前",
+                    label: "当前",
                     value: String(format: "%.1f", currentDecibel),
-                    color: .blue
+                    description: "分贝"
                 )
                 
                 StatisticItemView(
-                    title: "Leq",
+                    label: "Leq",
                     value: String(format: "%.1f", leqDecibel),
-                    color: .green
+                    description: "等效声级"
                 )
             }
             
             // 第二行：MIN, MAX, PEAK
             HStack(spacing: 20) {
                 StatisticItemView(
-                    title: "MIN",
+                    label: "MIN",
                     value: minDecibel < 0 ? "0.0" : String(format: "%.1f", minDecibel),
-                    color: .blue
+                    description: "最小值"
                 )
                 
                 StatisticItemView(
-                    title: "MAX",
+                    label: "MAX",
                     value: maxDecibel < 0 ? "0.0" : String(format: "%.1f", maxDecibel),
-                    color: .red
+                    description: "最大值"
                 )
                 
                 StatisticItemView(
-                    title: "PEAK",
+                    label: "PEAK",
                     value: peakDecibel < 0 ? "0.0" : String(format: "%.1f", peakDecibel),
-                    color: .purple
+                    description: "峰值"
                 )
             }
         }
@@ -362,44 +362,26 @@ struct StatisticsView: View {
     var body: some View {
         HStack(spacing: 30) {
             StatisticItemView(
-                title: "最大值",
+                label: "最大值",
                 value: maxDecibel < 0 ? "--" : String(format: "%.1f", maxDecibel),
-                color: .red
+                description: "dB"
             )
             
             StatisticItemView(
-                title: "最小值",
+                label: "最小值",
                 value: minDecibel < 0 ? "--" : String(format: "%.1f", minDecibel),
-                color: .blue
+                description: "dB"
             )
             
             StatisticItemView(
-                title: "状态",
+                label: "状态",
                 value: isRecording ? "录音中" : "停止",
-                color: isRecording ? .green : .gray
+                description: ""
             )
         }
     }
 }
 
-struct StatisticItemView: View {
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Text(value)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(color)
-        }
-    }
-}
 
 // MARK: - 增强控制按钮视图
 

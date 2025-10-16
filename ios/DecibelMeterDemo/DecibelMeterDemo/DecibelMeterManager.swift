@@ -316,11 +316,34 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 测量相关属性
     
-    /// 分贝计测量历史记录数组，存储分贝计的所有测量结果（最多1000条）
+    /// 分贝计测量历史记录数组，存储分贝计的所有测量结果（最多500条）
     private var decibelMeterHistory: [DecibelMeasurement] = []
     
-    /// 噪音测量计测量历史记录数组，存储噪音测量计的所有测量结果（最多1000条）
+    /// 噪音测量计测量历史记录数组，存储噪音测量计的所有测量结果（最多500条）
     private var noiseMeterHistory: [DecibelMeasurement] = []
+    
+    /// 最大历史记录数量（优化内存使用）
+    private let maxHistoryCount: Int = 500
+    
+    // MARK: - 性能优化属性
+    
+    /// 上次UI更新时间（用于回调节流）
+    private var lastUIUpdateTime: Date = Date()
+    
+    /// UI更新间隔（秒）- 降低更新频率以节省内存和CPU
+    private let uiUpdateInterval: TimeInterval = 0.1  // 100ms更新一次，从21.5Hz降低到10Hz
+    
+    /// 缓存的频谱数据（避免重复计算随机数）
+    private var cachedSpectrum: [Double]?
+    
+    /// 内存监控定时器
+    private var memoryMonitorTimer: Timer?
+    
+    /// 上次内存检查时间
+    private var lastMemoryCheckTime: Date = Date()
+    
+    /// 内存检查间隔（秒）
+    private let memoryCheckInterval: TimeInterval = 30.0  // 每30秒检查一次
     
     /// 时间权重滤波器，用于应用Fast、Slow、Impulse时间权重
     private var timeWeightingFilter: TimeWeightingFilter?
@@ -370,7 +393,8 @@ class DecibelMeterManager: NSObject {
     private let sampleRate: Double = 44100.0
     
     /// 音频缓冲区大小（采样点数），影响处理延迟和精度
-    private let bufferSize: UInt32 = 1024
+    /// 优化：增大缓冲区以减少回调频率，降低内存分配压力
+    private let bufferSize: UInt32 = 2048  // 从1024增加到2048，减少回调频率
     
     /// 参考声压（Pa），国际标准值为20微帕（20e-6 Pa）
     private let referencePressure: Double = 20e-6
@@ -1237,6 +1261,82 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 私有辅助方法
     
+    /// 检查是否应该更新UI（节流机制）
+    ///
+    /// 用于控制UI更新频率，避免过于频繁的回调导致性能问题
+    ///
+    /// - Returns: 是否应该更新UI
+    private func shouldUpdateUI() -> Bool {
+        let now = Date()
+        let timeSinceLastUpdate = now.timeIntervalSince(lastUIUpdateTime)
+        
+        if timeSinceLastUpdate >= uiUpdateInterval {
+            lastUIUpdateTime = now
+            return true
+        }
+        return false
+    }
+    
+    /// 检查内存使用情况
+    ///
+    /// 监控应用内存使用，在内存过高时执行清理操作
+    private func checkMemoryUsage() {
+        let now = Date()
+        guard now.timeIntervalSince(lastMemoryCheckTime) >= memoryCheckInterval else { return }
+        lastMemoryCheckTime = now
+        
+        #if DEBUG
+        // 获取内存使用信息
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_,
+                         task_flavor_t(MACH_TASK_BASIC_INFO),
+                         $0,
+                         &count)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            let usedMemoryMB = Double(info.resident_size) / 1024.0 / 1024.0
+            
+            print("📊 内存使用: \(String(format: "%.1f", usedMemoryMB)) MB")
+            
+            // 内存使用超过阈值时执行清理
+            if usedMemoryMB > 100.0 {  // 超过100MB
+                print("⚠️ 内存使用过高，执行清理操作")
+                performMemoryCleanup()
+            }
+        }
+        #endif
+    }
+    
+    /// 执行内存清理操作
+    ///
+    /// 在内存使用过高时清理不必要的缓存和数据
+    private func performMemoryCleanup() {
+        // 清理频谱缓存
+        cachedSpectrum = nil
+        
+        // 如果历史记录过多，进一步清理
+        if decibelMeterHistory.count > maxHistoryCount / 2 {
+            let removeCount = decibelMeterHistory.count / 2
+            decibelMeterHistory.removeFirst(removeCount)
+            print("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
+        }
+        
+        if noiseMeterHistory.count > maxHistoryCount / 2 {
+            let removeCount = noiseMeterHistory.count / 2
+            noiseMeterHistory.removeFirst(removeCount)
+            print("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
+        }
+        
+        // 强制垃圾回收
+        print("🧹 执行内存清理完成")
+    }
+    
     /// 格式化时间间隔为 HH:mm:ss 格式
     ///
     /// 将秒数转换为"时:分:秒"格式的字符串
@@ -1993,6 +2093,9 @@ class DecibelMeterManager: NSObject {
             peakDecibel = validatedRaw
         }
         
+        // 应用节流机制 - 只有在需要时才更新UI
+        guard shouldUpdateUI() else { return }
+        
         // 计算当前LEQ值（基于分贝计历史）
         let currentLeq = getDecibelMeterRealTimeLeq()
         
@@ -2002,6 +2105,9 @@ class DecibelMeterManager: NSObject {
     
     /// 更新噪音测量计数据并通知回调
     private func updateNoiseMeterData(_ measurement: DecibelMeasurement) {
+        // 应用节流机制 - 只有在需要时才更新UI
+        guard shouldUpdateUI() else { return }
+        
         // 计算当前LEQ值（基于噪音测量计历史）
         let currentLeq = getNoiseMeterRealTimeLeq()
         
@@ -2076,19 +2182,23 @@ class DecibelMeterManager: NSObject {
     /// 设置音频会话
     private func setupAudioSession() {
         do {
+            // 首先停用当前音频会话
+            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            
             // 配置音频会话支持后台录制
+            // 移除不兼容的选项，简化配置以避免错误
             try audioSession.setCategory(
                 .record,
                 mode: .measurement,
-                options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                options: [.allowBluetooth]
             )
             
-            // 启用后台音频处理
-            try audioSession.setActive(true, options: [])
-            
-            // 设置音频会话为支持后台处理
+            // 设置音频会话参数
             try audioSession.setPreferredSampleRate(44100.0)
             try audioSession.setPreferredIOBufferDuration(0.005) // 5ms缓冲区，提高响应速度
+            
+            // 重新激活音频会话
+            try audioSession.setActive(true, options: [])
             
         } catch {
             print("设置音频会话失败: \(error)")
@@ -2230,13 +2340,18 @@ class DecibelMeterManager: NSObject {
         decibelMeterHistory.append(decibelMeterMeasurement)
         noiseMeterHistory.append(noiseMeterMeasurement)
         
-        // 限制历史记录长度
-        if decibelMeterHistory.count > 1000 {
-            decibelMeterHistory.removeFirst()
+        // 优化历史记录长度管理 - 批量移除以提高性能
+        if decibelMeterHistory.count >= maxHistoryCount {
+            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+            decibelMeterHistory.removeFirst(removeCount)
         }
-        if noiseMeterHistory.count > 1000 {
-            noiseMeterHistory.removeFirst()
+        if noiseMeterHistory.count >= maxHistoryCount {
+            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+            noiseMeterHistory.removeFirst(removeCount)
         }
+        
+        // 定期检查内存使用情况
+        checkMemoryUsage()
     }
     
     /// 计算分贝计测量结果
@@ -2345,12 +2460,15 @@ class DecibelMeterManager: NSObject {
         }
     }
     
-    /// 计算频谱（简化版）
+    /// 计算频谱（优化版 - 缓存随机数据）
     private func calculateFrequencySpectrum(from samples: [Float]) -> [Double] {
-        // 简化版频谱计算
-        // 实际应用中需要使用FFT
-        let spectrum = Array(0..<32).map { _ in Double.random(in: 0...1) }
-        return spectrum
+        // 优化：缓存频谱数据，避免每次都生成新的随机数
+        // 实际应用中应该使用FFT分析真实频谱
+        if cachedSpectrum == nil {
+            // 只在第一次调用时生成随机频谱数据
+            cachedSpectrum = Array(0..<32).map { _ in Double.random(in: 0...1) }
+        }
+        return cachedSpectrum ?? []
     }
 }
 

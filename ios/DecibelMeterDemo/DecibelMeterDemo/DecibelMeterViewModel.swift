@@ -529,4 +529,49 @@ extension DecibelMeterViewModel {
             currentStatistics = statistics
         }
     }
+    
+    // MARK: - 图表数据获取方法
+    
+    /// 获取时间历程图数据（实时分贝曲线）
+    ///
+    /// 返回指定时间范围内的分贝变化曲线数据，用于绘制时间历程图
+    /// 符合 IEC 61672-1 标准的时间历程记录要求
+    ///
+    /// - Parameter timeRange: 时间范围（秒），默认60秒
+    /// - Returns: TimeHistoryChartData对象
+    func getTimeHistoryChartData(timeRange: TimeInterval = 60.0) -> TimeHistoryChartData {
+        return decibelManager.getTimeHistoryChartData(timeRange: timeRange)
+    }
+    
+    /// 获取频谱分析图数据
+    ///
+    /// 返回各频段的声压级分布数据，用于绘制频谱分析图
+    /// 符合 IEC 61260-1 标准的倍频程分析要求
+    ///
+    /// - Parameter bandType: 倍频程类型，"1/1"或"1/3"，默认"1/3"
+    /// - Returns: SpectrumChartData对象
+    func getSpectrumChartData(bandType: String = "1/3") -> SpectrumChartData {
+        return decibelManager.getSpectrumChartData(bandType: bandType)
+    }
+    
+    /// 获取统计分布图数据（L10、L50、L90）
+    ///
+    /// 返回声级的统计分布数据，用于分析噪声的统计特性
+    /// 符合 ISO 1996-2 标准的统计分析要求
+    ///
+    /// - Returns: StatisticalDistributionChartData对象
+    func getStatisticalDistributionChartData() -> StatisticalDistributionChartData {
+        return decibelManager.getStatisticalDistributionChartData()
+    }
+    
+    /// 获取LEQ趋势图数据
+    ///
+    /// 返回LEQ随时间变化的趋势数据，用于职业健康监测和长期暴露评估
+    /// 符合 ISO 1996-1 标准的等效连续声级计算要求
+    ///
+    /// - Parameter interval: 采样间隔（秒），默认10秒
+    /// - Returns: LEQTrendChartData对象
+    func getLEQTrendChartData(interval: TimeInterval = 10.0) -> LEQTrendChartData {
+        return decibelManager.getLEQTrendChartData(interval: interval)
+    }
 }
