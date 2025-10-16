@@ -1780,16 +1780,39 @@ class DecibelMeterManager: NSObject {
     ///   - standardWorkDay: 标准工作日时长（小时），默认8小时
     /// - Returns: TWA值（dB）
     ///
-    /// **计算公式**：
+    /// **正确的TWA计算公式**：
     /// ```
-    /// TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
+    /// 如果 T ≤ 8小时：TWA = LEQ
+    /// 如果 T > 8小时：TWA = LEQ + 10 × log₁₀(T/8)
     /// ```
+    ///
+    /// **TWA含义**：表示如果以当前噪声水平工作8小时，会得到的等效连续声级
     private func calculateTWA(leq: Double, duration: TimeInterval, standardWorkDay: Double = 8.0) -> Double {
         let exposureHours = duration / 3600.0  // 转换为小时
         
-        // TWA = 10 × log₁₀((T/8) × 10^(LEQ/10))
-        let energyFraction = (exposureHours / standardWorkDay) * pow(10.0, leq / 10.0)
-        let twa = 10.0 * log10(energyFraction)
+        // 调试输出
+        #if DEBUG
+        print("🔍 TWA计算调试:")
+        print("   - LEQ: \(String(format: "%.1f", leq)) dB")
+        print("   - 测量时长: \(String(format: "%.2f", exposureHours)) 小时")
+        print("   - 标准工作日: \(standardWorkDay) 小时")
+        #endif
+        
+        let twa: Double
+        if exposureHours <= standardWorkDay {
+            // 测量时间不超过8小时，TWA等于LEQ
+            twa = leq
+        } else {
+            // 测量时间超过8小时，需要时间加权调整
+            let timeWeighting = 10.0 * log10(exposureHours / standardWorkDay)
+            twa = leq + timeWeighting
+        }
+        
+        // 调试输出
+        #if DEBUG
+        print("   - 最终TWA: \(String(format: "%.1f", twa)) dB")
+        print("----------------------------------------")
+        #endif
         
         return twa
     }

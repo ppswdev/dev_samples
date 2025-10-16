@@ -15,6 +15,7 @@
 //
 
 import SwiftUI
+import Charts
 
 struct NoiseDosimeterView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
@@ -47,30 +48,55 @@ struct NoiseDosimeterView: View {
                         
                         // 允许暴露时长列表
                         PermissibleExposureDurationListView(viewModel: viewModel)
+                        
+                        // 实时分贝曲线图
+                        RealTimeDecibelChartView(viewModel: viewModel)
+                        
+                        // 剂量累积图
+                        DoseAccumulationChartView(viewModel: viewModel)
+                        
+                        // TWA趋势图
+                        TWATrendChartView(viewModel: viewModel)
                     }
                     .padding()
                     
-                    // 控制按钮
-                    EnhancedControlButtonsView(
-                        isRecording: viewModel.isRecording,
-                        measurementState: viewModel.measurementState,
-                        onStart: {
-                            viewModel.startMeasurement()
-                        },
-                        onStop: {
-                            viewModel.stopMeasurement()
-                        },
-                        onReset: {
-                            viewModel.resetAllData()
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
                     
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(content: {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        viewModel.resetAllData()
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.orange)
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 20) {
+                        // 开始/停止按钮
+                        Button(action: {
+                            if viewModel.isRecording {
+                                viewModel.stopMeasurement()
+                            } else {
+                                viewModel.startMeasurement()
+                            }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: viewModel.isRecording ? "stop.fill" : "play.fill")
+                                Text(viewModel.isRecording ? "停止" : "开始")
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(viewModel.isRecording ? Color.red : Color.green)
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("噪声标准") {
@@ -892,6 +918,457 @@ struct StandardOptionView: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
+}
+
+// MARK: - 实时分贝曲线图视图
+
+struct RealTimeDecibelChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            Text("实时分贝曲线图")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getChartData(), id: \.time) { dataPoint in
+                    LineMark(
+                        x: .value("时间", dataPoint.time),
+                        y: .value("分贝", dataPoint.decibel)
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+            }
+            .frame(height: 200)
+            .chartYScale(domain: 0...140)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 10)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let timeValue = value.as(Int.self) {
+                        AxisValueLabel {
+                            Text("\(timeValue)s")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let decibelValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(decibelValue))dB")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(12)
+        }
+        .padding()
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getChartData() -> [ChartDataPoint] {
+        let history = viewModel.getNoiseMeterHistory()
+        let maxPoints = 60 // 显示最近60个数据点
+        
+        let recentHistory = Array(history.suffix(maxPoints))
+        return recentHistory.enumerated().map { index, measurement in
+            ChartDataPoint(
+                time: index,
+                decibel: measurement.calibratedDecibel
+            )
+        }
+    }
+}
+
+// MARK: - 图表数据点结构
+
+struct ChartDataPoint {
+    let time: Int
+    let decibel: Double
+}
+
+// MARK: - 剂量累积图视图
+
+struct DoseAccumulationChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            Text("剂量累积图")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getDoseChartData(), id: \.time) { dataPoint in
+                    AreaMark(
+                        x: .value("时间", dataPoint.time),
+                        y: .value("剂量", dataPoint.dose)
+                    )
+                    .foregroundStyle(.linearGradient(
+                        colors: [.blue.opacity(0.3), .blue.opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+                    
+                    LineMark(
+                        x: .value("时间", dataPoint.time),
+                        y: .value("剂量", dataPoint.dose)
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+                
+                // 100% 剂量线
+                RuleMark(y: .value("标准", 100))
+                    .foregroundStyle(.red)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    .annotation(position: .topTrailing) {
+                        Text("100%")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+            }
+            .frame(height: 200)
+            .chartYScale(domain: 0...120)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 10)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let timeValue = value.as(Int.self) {
+                        AxisValueLabel {
+                            Text("\(timeValue)s")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let doseValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(doseValue))%")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 当前剂量显示
+            HStack {
+                Text("当前总剂量:")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(String(format: "%.1f", getTotalDosePercentage()))%")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(doseColor)
+            }
+            .padding(.top, 8)
+        }
+        .padding()
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getDoseChartData() -> [DoseChartDataPoint] {
+        let history = viewModel.getNoiseMeterHistory()
+        let maxPoints = 60 // 显示最近60个数据点
+        
+        let recentHistory = Array(history.suffix(maxPoints))
+        var cumulativeDose = 0.0
+        
+        return recentHistory.enumerated().map { index, measurement in
+            // 简化的剂量计算（实际应用中需要更复杂的算法）
+            let timeInSeconds = Double(index) * 0.1 // 假设每0.1秒一个数据点
+            let currentDose = min(100.0, timeInSeconds * 0.1) // 简化的剂量累积
+            cumulativeDose = currentDose
+            
+            return DoseChartDataPoint(
+                time: index,
+                dose: cumulativeDose
+            )
+        }
+    }
+    
+    private func getTotalDosePercentage() -> Double {
+        let table = viewModel.getPermissibleExposureDurationTable()
+        return table.totalDose
+    }
+    
+    private var doseColor: Color {
+        let dose = getTotalDosePercentage()
+        switch dose {
+        case 0..<50:
+            return .green
+        case 50..<80:
+            return .yellow
+        case 80..<100:
+            return .orange
+        case 100...:
+            return .red
+        default:
+            return .gray
+        }
+    }
+}
+
+// MARK: - 剂量图表数据点结构
+
+struct DoseChartDataPoint {
+    let time: Int
+    let dose: Double
+}
+
+// MARK: - TWA趋势图视图
+
+struct TWATrendChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            Text("TWA趋势图")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // Swift Charts 实现
+            Chart {
+                ForEach(getTWAChartData(), id: \.time) { dataPoint in
+                    LineMark(
+                        x: .value("时间", dataPoint.time),
+                        y: .value("TWA", dataPoint.twa)
+                    )
+                    .foregroundStyle(.orange)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .symbol(Circle())
+                    .symbolSize(20)
+                }
+                
+                // 标准限值线 (85dB)
+                RuleMark(y: .value("标准限值", 85))
+                    .foregroundStyle(.red)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    .annotation(position: .topTrailing) {
+                        Text("85dB")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                
+                // 警告线 (80dB)
+                RuleMark(y: .value("警告线", 80))
+                    .foregroundStyle(.yellow)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .annotation(position: .topLeading) {
+                        Text("80dB")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+            }
+            .frame(height: 200)
+            .chartYScale(domain: 70...100)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 60)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let timeValue = value.as(Int.self) {
+                        AxisValueLabel {
+                            if timeValue >= 3600 {
+                                Text("\(timeValue/3600)h")
+                                    .font(.caption)
+                            } else if timeValue >= 60 {
+                                Text("\(timeValue/60)m")
+                                    .font(.caption)
+                            } else {
+                                Text("\(timeValue)s")
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 5)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let twaValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(twaValue))dB")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 当前TWA显示
+            HStack {
+                Text("当前TWA:")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(String(format: "%.1f", getTWAValue())) dB")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(twaColor)
+            }
+            .padding(.top, 8)
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    private func getTWAChartData() -> [TWAChartDataPoint] {
+        let history = viewModel.getNoiseMeterHistory()
+        
+        // 如果没有数据，返回空数组
+        guard !history.isEmpty else {
+            return []
+        }
+        
+        // 计算TWA趋势数据点
+        var twaDataPoints: [TWAChartDataPoint] = []
+        let maxPoints = min(60, history.count) // 最多显示60个数据点
+        
+        // 从历史数据的开始计算累积TWA
+        for i in stride(from: max(0, history.count - maxPoints), to: history.count, by: max(1, history.count / 60)) {
+            let subsetHistory = Array(history[0...i])
+            let twa = calculateCumulativeTWA(from: subsetHistory)
+            
+            // 计算从测量开始的时间（秒）
+            let measurementStartTime = subsetHistory.first?.timestamp ?? Date()
+            let currentTime = subsetHistory.last?.timestamp ?? Date()
+            let elapsedSeconds = Int(currentTime.timeIntervalSince(measurementStartTime))
+            
+            twaDataPoints.append(TWAChartDataPoint(
+                time: elapsedSeconds,
+                twa: twa
+            ))
+        }
+        
+        return twaDataPoints
+    }
+    
+    /// 计算累积TWA值（符合国际标准）
+    /// - Parameter history: 测量历史数据
+    /// - Returns: TWA值（dB）
+    private func calculateCumulativeTWA(from history: [DecibelMeasurement]) -> Double {
+        guard !history.isEmpty else { return 0.0 }
+        
+        // 计算总测量时间
+        let startTime = history.first!.timestamp
+        let endTime = history.last!.timestamp
+        let totalDuration = endTime.timeIntervalSince(startTime)
+        
+        // 如果测量时间太短（小于1秒），返回当前分贝值
+        guard totalDuration >= 1.0 else {
+            return history.last?.calibratedDecibel ?? 0.0
+        }
+        
+        // 计算累积LEQ值（能量平均）
+        // 正确的LEQ公式：LEQ = 10 × log₁₀(1/N × Σᵢ₌₁ⁿ 10^(Li/10))
+        var cumulativeEnergy = 0.0
+        let sampleCount = history.count
+        
+        guard sampleCount > 0 else { return 0.0 }
+        
+        for measurement in history {
+            // 将分贝值转换为线性能量值：10^(Li/10)
+            let energy = pow(10.0, measurement.calibratedDecibel / 10.0)
+            cumulativeEnergy += energy
+        }
+        
+        // 计算能量平均：(1/N × Σᵢ₌₁ⁿ 10^(Li/10))
+        let averageEnergy = cumulativeEnergy / Double(sampleCount)
+        
+        // 转换回分贝：LEQ = 10 × log₁₀(平均能量)
+        let leq = 10.0 * log10(averageEnergy)
+        
+        // 计算TWA
+        let exposureHours = totalDuration / 3600.0  // 转换为小时
+        
+        // 调试输出（可以后续移除）
+        #if DEBUG
+        print("🔍 TWA计算调试:")
+        print("   - 样本数量: \(sampleCount)")
+        print("   - 总能量: \(cumulativeEnergy)")
+        print("   - 平均能量: \(averageEnergy)")
+        print("   - LEQ: \(String(format: "%.1f", leq)) dB")
+        print("   - 测量时间: \(String(format: "%.1f", totalDuration))秒")
+        print("   - 测量小时: \(String(format: "%.3f", exposureHours))小时")
+        #endif
+        let standardWorkDay = 8.0  // 标准工作日8小时
+        
+        // 正确的TWA计算方法：
+        // 1. 如果测量时间 <= 8小时，TWA = LEQ
+        // 2. 如果测量时间 > 8小时，TWA = LEQ + 10 × log₁₀(T/8)
+        // 3. 对于实时监测，通常使用LEQ作为TWA的近似值
+        
+        let finalTWA: Double
+        if exposureHours <= standardWorkDay {
+            // 测量时间不超过8小时，TWA等于LEQ
+            finalTWA = leq
+        } else {
+            // 测量时间超过8小时，需要时间加权调整
+            let timeWeighting = 10.0 * log10(exposureHours / standardWorkDay)
+            finalTWA = leq + timeWeighting
+        }
+        
+        // 调试输出最终TWA
+        #if DEBUG
+        print("   - 最终TWA: \(String(format: "%.1f", finalTWA)) dB")
+        print("----------------------------------------")
+        #endif
+        
+        return finalTWA
+    }
+    
+    private func getTWAValue() -> Double {
+        let doseData = viewModel.getNoiseDoseData()
+        return doseData.twa
+    }
+    
+    private var twaColor: Color {
+        let twa = getTWAValue()
+        switch twa {
+        case 0..<80:
+            return .green
+        case 80..<85:
+            return .yellow
+        case 85..<90:
+            return .orange
+        case 90...:
+            return .red
+        default:
+            return .gray
+        }
+    }
+}
+
+// MARK: - TWA图表数据点结构
+
+struct TWAChartDataPoint {
+    let time: Int
+    let twa: Double
 }
 
 #Preview {

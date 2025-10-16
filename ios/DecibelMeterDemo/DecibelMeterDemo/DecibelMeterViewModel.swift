@@ -363,7 +363,7 @@ class DecibelMeterViewModel: ObservableObject {
         }
         
         // 噪音测量计数据更新回调（暂时不处理，因为当前UI主要显示分贝计数据）
-        decibelManager.onNoiseMeterDataUpdate = { [weak self] current, peak, max, min, leq in
+        decibelManager.onNoiseMeterDataUpdate = { current, peak, max, min, leq in
             // 噪音测量计的数据更新可以在这里处理
             // 目前主要用于后台计算，UI显示仍以分贝计为主
         }
@@ -472,6 +472,11 @@ extension DecibelMeterViewModel {
     /// 获取允许暴露时长表
     func getPermissibleExposureDurationTable() -> PermissibleExposureDurationTable {
         return decibelManager.getPermissibleExposureDurationTable()
+    }
+    
+    /// 获取噪声测量计历史数据（用于图表）
+    func getNoiseMeterHistory() -> [DecibelMeasurement] {
+        return decibelManager.getNoiseMeterHistory()
     }
     
     /// 设置当前噪声标准

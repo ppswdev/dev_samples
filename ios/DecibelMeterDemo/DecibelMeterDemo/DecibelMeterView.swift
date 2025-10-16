@@ -45,26 +45,42 @@ struct DecibelMeterView: View {
                     }
                     .padding()
                     
-                    // 控制按钮
-                    EnhancedControlButtonsView(
-                        isRecording: viewModel.isRecording,
-                        measurementState: viewModel.measurementState,
-                        onStart: {
-                            viewModel.startMeasurement()
-                        },
-                        onStop: {
-                            viewModel.stopMeasurement()
-                        },
-                        onReset: {
-                            viewModel.resetAllData()
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(content: {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        viewModel.resetAllData()
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.orange)
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 20) {
+                        // 开始/停止按钮
+                        Button(action: {
+                            if viewModel.isRecording {
+                                viewModel.stopMeasurement()
+                            } else {
+                                viewModel.startMeasurement()
+                            }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: viewModel.isRecording ? "stop.fill" : "play.fill")
+                                Text(viewModel.isRecording ? "停止" : "开始")
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(viewModel.isRecording ? Color.red : Color.green)
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button("时间权重 (\(viewModel.currentTimeWeighting.rawValue))") {
