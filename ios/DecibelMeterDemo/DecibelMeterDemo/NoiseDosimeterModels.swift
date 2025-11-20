@@ -202,10 +202,10 @@ struct NoiseDoseData: Codable {
 
 /// 风险等级
 enum RiskLevel: String, Codable {
-    case safe = "安全"           // 0-50%剂量
-    case acceptable = "可接受"   // 50-100%剂量
-    case exceeding = "超标"      // 100-200%剂量
-    case dangerous = "严重超标"  // >200%剂量
+    case safe = "safe"           // 0-50%剂量
+    case acceptable = "acceptable"   // 50-100%剂量
+    case exceeding = "exceeding"      // 100-200%剂量
+    case dangerous = "dangerous"  // >200%剂量
     
     /// 根据剂量百分比判断风险等级
     static func from(dosePercentage: Double) -> RiskLevel {

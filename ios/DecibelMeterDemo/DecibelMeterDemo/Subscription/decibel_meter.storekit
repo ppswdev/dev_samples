@@ -1,0 +1,243 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "685B9D21",
+  "nonRenewingSubscriptions" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "D0A171E0",
+      "localizations" : [
+        {
+          "description" : "非自动续订月会员",
+          "displayName" : "一次性月会员",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "premium_1month",
+      "referenceName" : "非自动续订月会员",
+      "type" : "NonRenewingSubscription"
+    }
+  ],
+  "products" : [
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "4BFF16AD",
+      "localizations" : [
+        {
+          "description" : "非消耗性产品-终身会员",
+          "displayName" : "终身会员",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "premium_lifetime",
+      "referenceName" : "非消耗性产品-终身会员",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "10",
+      "familyShareable" : false,
+      "internalID" : "52581D2C",
+      "localizations" : [
+        {
+          "description" : "消耗型产品-金币100",
+          "displayName" : "金币100",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "coins_100",
+      "referenceName" : "消耗型产品-金币100",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "20",
+      "familyShareable" : false,
+      "internalID" : "513F90A2",
+      "localizations" : [
+        {
+          "description" : "消耗型产品-金币200",
+          "displayName" : "金币200",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "coins_200",
+      "referenceName" : "消耗型产品-金币200",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "13.99",
+      "familyShareable" : false,
+      "internalID" : "3391727B",
+      "localizations" : [
+        {
+          "description" : "享受无广告服务",
+          "displayName" : "移除广告",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "remove_ads",
+      "referenceName" : "移除广告",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "FF7796C8",
+      "localizations" : [
+
+      ],
+      "name" : "MySubs",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "6.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "FC927A0D",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "按周享受VIP服务",
+              "displayName" : "周度会员VIP",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "premium_weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "周度会员VIP",
+          "subscriptionGroupID" : "FF7796C8",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "16.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "3029B7EB",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "按月享受VIP",
+              "displayName" : "月度会员VIP",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "premium_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "月度会员VIP",
+          "subscriptionGroupID" : "FF7796C8",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "69.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "58BE3762",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "按年享受VIP服务",
+              "displayName" : "年度会员VIP",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "premium_yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "年度会员VIP",
+          "subscriptionGroupID" : "FF7796C8",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

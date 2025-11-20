@@ -998,7 +998,9 @@ class DecibelMeterManager: NSObject {
             } else {
                 // 模拟数据：基于当前分贝值和频率权重
                 let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: frequency) ?? 0.0
-                magnitude = currentDecibel + weightCompensation + Double.random(in: -5...5)
+                // 使用基于频率的确定性噪声，避免随机数导致的频繁重绘
+                let noise = sin(frequency * 0.001) * 3.0
+                magnitude = currentDecibel + weightCompensation + noise
             }
             
             return SpectrumDataPoint(
@@ -2067,7 +2069,9 @@ class DecibelMeterManager: NSObject {
     /// 更新状态并通知回调
     private func updateState(_ newState: MeasurementState) {
         measurementState = newState
-        onStateChange?(newState)
+        DispatchQueue.main.async { [weak self] in
+            self?.onStateChange?(newState)
+        }
     }
     
     /// 更新分贝计数据并通知回调
@@ -2100,7 +2104,10 @@ class DecibelMeterManager: NSObject {
         let currentLeq = getDecibelMeterRealTimeLeq()
         
         //print("updateDecibelMeterData currentDecibel: \(currentDecibel), maxDecibel: \(maxDecibel), minDecibel: \(minDecibel), peakDecibel: \(peakDecibel), leq: \(currentLeq)")
-        onDecibelMeterDataUpdate?(currentDecibel, peakDecibel, maxDecibel, minDecibel, currentLeq)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.onDecibelMeterDataUpdate?(self.currentDecibel, self.peakDecibel, self.maxDecibel, self.minDecibel, currentLeq)
+        }
     }
     
     /// 更新噪音测量计数据并通知回调
@@ -2117,13 +2124,17 @@ class DecibelMeterManager: NSObject {
         let noisePeak = getNoiseMeterPeak()
         
         //print("updateNoiseMeterData currentDecibel: \(measurement.calibratedDecibel), maxDecibel: \(noiseMax), minDecibel: \(noiseMin), peakDecibel: \(noisePeak), leq: \(currentLeq)")
-        onNoiseMeterDataUpdate?(measurement.calibratedDecibel, noisePeak, noiseMax, noiseMin, currentLeq)
+        DispatchQueue.main.async { [weak self] in
+            self?.onNoiseMeterDataUpdate?(measurement.calibratedDecibel, noisePeak, noiseMax, noiseMin, currentLeq)
+        }
     }
     
     /// 更新测量数据并通知回调
     private func updateMeasurement(_ measurement: DecibelMeasurement) {
         currentMeasurement = measurement
-        onMeasurementUpdate?(measurement)
+        DispatchQueue.main.async { [weak self] in
+            self?.onMeasurementUpdate?(measurement)
+        }
     }
     
     // MARK: - 私有统计计算方法
@@ -2295,9 +2306,8 @@ class DecibelMeterManager: NSObject {
         
         // 安装音频处理块
         inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
-            Task { @MainActor in
-                self?.processAudioBuffer(buffer)
-            }
+            // 在后台线程处理音频数据
+            self?.processAudioBuffer(buffer)
         }
     }
     

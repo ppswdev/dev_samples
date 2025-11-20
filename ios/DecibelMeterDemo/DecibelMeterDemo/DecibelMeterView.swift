@@ -49,14 +49,14 @@ struct DecibelMeterView: View {
                             // 时间历程图 - 实时分贝曲线
                             TimeHistoryChartView(viewModel: viewModel)
                             
-//                            // 频谱分析图 - 1/1和1/3倍频程
-//                            SpectrumAnalysisChartView(viewModel: viewModel)
-//                            
-//                            // 统计分布图 - L10、L50、L90
-//                            StatisticalDistributionChartView(viewModel: viewModel)
-//                            
-//                            // LEQ趋势图 - LEQ随时间变化
-//                            LEQTrendChartView(viewModel: viewModel)
+                           // 频谱分析图 - 1/1和1/3倍频程
+                          //SpectrumAnalysisChartView(viewModel: viewModel)
+                           
+                           // 统计分布图 - L10、L50、L90
+                           StatisticalDistributionChartView(viewModel: viewModel)
+                           
+                           // LEQ趋势图 - LEQ随时间变化
+                           LEQTrendChartView(viewModel: viewModel)
                         }
                     }
                     .padding()
@@ -509,6 +509,8 @@ struct TimeHistoryChartView: View {
 struct SpectrumAnalysisChartView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
     @State private var selectedBandType: String = "1/3"
+    @State private var cachedData: SpectrumChartData?
+    @State private var lastUpdateTime: Date = Date()
     
     var body: some View {
         VStack(spacing: 15) {
@@ -539,9 +541,8 @@ struct SpectrumAnalysisChartView: View {
                 }
             }
             .frame(height: 200)
-            .chartXScale(domain: 20...20000) // 明确X轴范围：20Hz-20kHz
+            .chartXScale(domain: 20...20000, type: .log) // 对数坐标轴，范围20Hz-20kHz
             .chartYScale(domain: 0...100) // 明确Y轴范围：0-100dB
-            .chartXScale(type: .log)
             .chartXAxis {
                 AxisMarks(values: .stride(by: 1)) { value in
                     AxisGridLine()
@@ -586,10 +587,33 @@ struct SpectrumAnalysisChartView: View {
         .padding()
         .background(Color.green.opacity(0.1))
         .cornerRadius(15)
+        .onChange(of: selectedBandType) { _ in
+            // 当倍频程类型改变时，清除缓存
+            DispatchQueue.main.async {
+                cachedData = nil
+            }
+        }
     }
     
     private func getChartData() -> SpectrumChartData {
-        return viewModel.getSpectrumChartData(bandType: selectedBandType)
+        let now = Date()
+        
+        // 如果缓存数据存在且时间间隔小于1秒，使用缓存数据
+        if let cached = cachedData,
+           now.timeIntervalSince(lastUpdateTime) < 1.0 {
+            return cached
+        }
+        
+        // 获取新数据并更新缓存
+        let newData = viewModel.getSpectrumChartData(bandType: selectedBandType)
+        
+        // 在主线程更新缓存状态
+        DispatchQueue.main.async {
+            cachedData = newData
+            lastUpdateTime = now
+        }
+        
+        return newData
     }
     
     private func formatFrequency(_ frequency: Double) -> String {
@@ -744,7 +768,7 @@ struct LEQTrendChartView: View {
             Chart {
                 ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
                     LineMark(
-                        x: .value("时间", dataPoint.timestamp),
+                        x: .value("时间", timeIntervalFromStart(dataPoint.timestamp)),
                         y: .value("LEQ", dataPoint.cumulativeLeq)
                     )
                     .foregroundStyle(.purple)
@@ -757,10 +781,10 @@ struct LEQTrendChartView: View {
             .chartXScale(domain: 0...3600) // 明确X轴范围：0-3600秒（1小时）
             .chartYScale(domain: 20...120) // 明确Y轴范围：20-120dB
             .chartXAxis {
-                AxisMarks(values: .stride(by: 60)) { value in
+                AxisMarks(values: .stride(by: 300)) { value in // 每5分钟显示一个刻度
                     AxisGridLine()
                     AxisTick()
-                    if let timeValue = value.as(Date.self) {
+                    if let timeValue = value.as(TimeInterval.self) {
                         AxisValueLabel {
                             Text(formatLEQTimeAxis(timeValue))
                                 .font(.caption)
@@ -806,14 +830,27 @@ struct LEQTrendChartView: View {
         return viewModel.getLEQTrendChartData(interval: 10.0)
     }
     
-    private func formatLEQTimeAxis(_ date: Date) -> String {
-        let now = Date()
-        let timeDiff = now.timeIntervalSince(date)
-        
-        if timeDiff < 3600 {
-            return "\(Int(timeDiff/60))m"
+    private func timeIntervalFromStart(_ timestamp: Date) -> TimeInterval {
+        guard let firstTimestamp = getChartData().dataPoints.first?.timestamp else {
+            return 0
+        }
+        return timestamp.timeIntervalSince(firstTimestamp)
+    }
+    
+    private func formatLEQTimeAxis(_ timeInterval: TimeInterval) -> String {
+        if timeInterval < 60 {
+            return "\(Int(timeInterval))s"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m"
         } else {
-            return "\(Int(timeDiff/3600))h"
+            let hours = Int(timeInterval / 3600)
+            let minutes = Int((timeInterval.truncatingRemainder(dividingBy: 3600)) / 60)
+            if minutes > 0 {
+                return "\(hours)h\(minutes)m"
+            } else {
+                return "\(hours)h"
+            }
         }
     }
     

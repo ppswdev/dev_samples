@@ -360,6 +360,7 @@ struct ExportConfig: Codable {
     }
 }
 
+
 // MARK: - 扩展方法
 
 extension DecibelMeasurement {
@@ -382,6 +383,23 @@ extension DecibelMeasurement {
     /// CSV标题行
     static func csvHeader() -> String {
         return "时间,原始分贝,A权重分贝,快权重分贝,慢权重分贝,校准分贝,等级描述"
+    }
+    
+    /// 转换为Map格式
+    func toMap() -> [String: Any] {
+        return [
+            "id": id.uuidString,
+            "timestamp": timestamp.timeIntervalSince1970 * 1000, // 转换为毫秒
+            "rawDecibel": rawDecibel,
+            "aWeightedDecibel": aWeightedDecibel,
+            "fastDecibel": fastDecibel,
+            "slowDecibel": slowDecibel,
+            "calibratedDecibel": calibratedDecibel,
+            "frequencySpectrum": frequencySpectrum,
+            "displayDecibel": displayDecibel,
+            "levelDescription": levelDescription,
+            "levelColor": levelColor
+        ]
     }
 }
 
@@ -410,3 +428,4 @@ extension MeasurementSession {
         return "会话名称,开始时间,结束时间,持续时间(秒),平均分贝,最大分贝,最小分贝,Leq,TWA,噪声剂量(%)"
     }
 }
+

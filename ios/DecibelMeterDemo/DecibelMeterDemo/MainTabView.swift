@@ -31,6 +31,12 @@ struct MainTabView: View {
                     Text("噪音测量计")
                 }
             
+            ShopMainView()
+                .tabItem{
+                    Image(systemName: "bag")
+                    Text("商城")
+                }
+            
             // 设置Tab
             SettingsView(viewModel: viewModel)
                 .tabItem {
