@@ -125,6 +125,7 @@ class DecibelMeterViewModel: ObservableObject {
     /// ```
     func startMeasurement() {
         Task {
+            // 启用音频录制功能
             await decibelManager.startMeasurement()
             hasStartedMeasurement = true  // 标记已经开始测量
             startStatisticsTimer()
