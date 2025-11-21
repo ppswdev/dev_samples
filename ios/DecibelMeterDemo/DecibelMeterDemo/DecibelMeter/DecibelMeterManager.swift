@@ -426,7 +426,8 @@ class DecibelMeterManager: NSObject {
     private let historyQueue = DispatchQueue(label: "com.decibelmeter.history", qos: .userInitiated)
     
     /// 临时录音文件名（固定）
-    private let tempRecordingFileName = "recording_temp.m4a"
+    /// 使用 .caf 格式（Core Audio Format + PCM 编码），兼容性好，无需编码器
+    private let tempRecordingFileName = "recording_temp.caf"
     
     // MARK: - 初始化
     
@@ -2630,28 +2631,28 @@ class DecibelMeterManager: NSObject {
             try? FileManager.default.removeItem(at: tempURL)
         }
         
-        // 创建音频格式
+        // 获取输入音频格式
         guard let inputNode = inputNode,
-              let format = audioEngine?.inputNode.outputFormat(forBus: 0) else {
+              let inputFormat = audioEngine?.inputNode.outputFormat(forBus: 0) else {
             throw DecibelMeterError.inputNodeNotFound
         }
         
-        // 构建音频文件设置（手动构建以确保完整性）
-        let audioSettings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),  // M4A格式
-            AVSampleRateKey: format.sampleRate,
-            AVNumberOfChannelsKey: format.channelCount,
-            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
-        ]
+        // ⭐ 使用 CAF + PCM 格式（最简单可靠的方案）
+        // PCM 是未压缩格式，直接写入原始音频数据，无需编码器
+        // CAF 容器支持 PCM，兼容性好，适合声学测量
         
-        // 创建临时录音文件
+        // 创建临时录音文件（使用输入格式直接创建，无需额外设置）
         do {
-            audioFile = try AVAudioFile(forWriting: tempURL, settings: audioSettings)
+            // 直接使用输入格式创建 AVAudioFile
+            // AVAudioFile 会自动使用 CAF 容器 + PCM 编码
+            audioFile = try AVAudioFile(forWriting: tempURL, settings: inputFormat.settings)
             isRecordingAudio = true
             recordingStartTime = Date()
             
             print("✅ 开始录制到临时文件: \(tempRecordingFileName)")
-            print("   音频格式: 采样率=\(format.sampleRate)Hz, 通道数=\(format.channelCount), 格式=M4A")
+            print("   音频格式: 采样率=\(inputFormat.sampleRate)Hz, 通道数=\(inputFormat.channelCount), 格式=PCM")
+            print("   输入格式: \(inputFormat)")
+            print("   文件格式: \(audioFile?.fileFormat ?? inputFormat)")
         } catch {
             print("❌ 创建音频文件失败: \(error.localizedDescription)")
             print("   错误详情: \(error)")

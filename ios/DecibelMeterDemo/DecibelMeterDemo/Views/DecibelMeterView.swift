@@ -194,12 +194,19 @@ struct DecibelMeterView: View {
     private func saveRecording() {
         let manager = DecibelMeterManager.shared
         
+        print("🔘 保存录音按钮被点击")
+        print("   - viewModel.isRecording: \(viewModel.isRecording)")
+        print("   - manager.isRecordingAudioFile(): \(manager.isRecordingAudioFile())")
+        
         // 检查是否正在录制
         guard manager.isRecordingAudioFile() else {
             saveErrorMessage = "当前没有正在录制的音频"
             showSaveErrorAlert = true
+            print("❌ 无法保存：当前没有正在录制的音频")
             return
         }
+        
+        print("✅ 开始保存录音...")
         
         // 创建保存目录
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -217,7 +224,7 @@ struct DecibelMeterView: View {
         // 生成文件名（带时间戳）
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        let fileName = "recording_\(dateFormatter.string(from: Date())).m4a"
+        let fileName = "recording_\(dateFormatter.string(from: Date())).caf"
         let destinationURL = savedDirectory.appendingPathComponent(fileName)
         
         // 复制录音文件
@@ -397,7 +404,7 @@ struct DecibelMeterView: View {
             )
             
             let audioFiles = fileURLs
-                .filter { $0.pathExtension == "m4a" || $0.pathExtension == "aac" || $0.pathExtension == "wav" }
+                .filter { $0.pathExtension == "m4a" || $0.pathExtension == "aac" || $0.pathExtension == "wav" || $0.pathExtension == "caf" }
                 .compactMap { url -> AudioFileInfo? in
                     do {
                         let resourceValues = try url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
@@ -1301,27 +1308,58 @@ struct AudioRecordingControlView: View {
     let onStop: () -> Void
     let onShare: (AudioFileInfo) -> Void
     
+    // 使用 ViewModel 的 @Published 属性，自动触发 UI 更新
+    private var isRecordingAudio: Bool {
+        viewModel.isRecordingAudio
+    }
+    
+    private var canSaveRecording: Bool {
+        viewModel.isRecording && viewModel.isRecordingAudio
+    }
+    
     var body: some View {
         VStack(spacing: 15) {
-            // 标题
-            Text("音频录制")
-                .font(.headline)
-                .foregroundColor(.primary)
+            // 标题和录制状态
+            HStack {
+                Text("音频录制")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                // 录制状态指示器
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isRecordingAudio ? Color.red : Color.gray)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(isRecordingAudio ? "录制中" : "未录制")
+                        .font(.caption)
+                        .foregroundColor(isRecordingAudio ? .red : .secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(12)
+            }
             
             // 保存按钮
-            Button(action: onSave) {
+            Button(action: {
+                print("🔘 保存按钮点击 - canSave: \(canSaveRecording), isRecording: \(viewModel.isRecording), isRecordingAudio: \(isRecordingAudio)")
+                onSave()
+            }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "square.and.arrow.down")
-                    Text("保存录音")
+                    Image(systemName: canSaveRecording ? "square.and.arrow.down.fill" : "square.and.arrow.down")
+                    Text(canSaveRecording ? "保存录音" : "请先开始测量")
                 }
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(viewModel.isRecording ? Color.blue : Color.gray)
+                .background(canSaveRecording ? Color.blue : Color.gray)
                 .cornerRadius(10)
             }
-            .disabled(!viewModel.isRecording || !DecibelMeterManager.shared.isRecordingAudioFile())
+            .disabled(!canSaveRecording)
             
             // 已保存的音频文件列表
             if !savedAudioFiles.isEmpty {
@@ -1332,7 +1370,7 @@ struct AudioRecordingControlView: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
                     
-                    ForEach(savedAudioFiles) { fileInfo in
+                    ForEach(savedAudioFiles.reversed()) { fileInfo in
                         AudioFileRowView(
                             fileInfo: fileInfo,
                             isPlaying: isPlaying && currentPlayingFile?.id == fileInfo.id,
@@ -1380,6 +1418,7 @@ struct AudioFileRowView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 
                 HStack(spacing: 12) {
                     Text(fileInfo.formattedDate)
@@ -1413,8 +1452,6 @@ struct AudioFileRowView: View {
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
-
-
 
 #Preview {
     DecibelMeterView(viewModel: DecibelMeterViewModel())

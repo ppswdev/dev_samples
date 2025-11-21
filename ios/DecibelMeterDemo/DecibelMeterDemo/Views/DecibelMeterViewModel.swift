@@ -48,8 +48,11 @@ class DecibelMeterViewModel: ObservableObject {
     /// 峰值PEAK（dB），不应用时间权重，-1表示未初始化
     @Published var peakDecibel: Double = -1.0
     
-    /// 是否正在录制标志
+    /// 是否正在录制标志（测量状态）
     @Published var isRecording: Bool = false
+    
+    /// 是否正在录制音频文件
+    @Published var isRecordingAudio: Bool = false
     
     /// 是否已经开始过测量（用于控制MIN/MAX/PEAK的显示）
     @Published var hasStartedMeasurement: Bool = false
@@ -125,9 +128,17 @@ class DecibelMeterViewModel: ObservableObject {
     /// ```
     func startMeasurement() {
         Task {
-            // 启用音频录制功能
-            await decibelManager.startMeasurement()
+            // 启用音频录制功能（默认开启）
+            await decibelManager.startMeasurement(enableRecording: true)
             hasStartedMeasurement = true  // 标记已经开始测量
+            
+            // 延迟一点点时间，确保录制已经启动
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            
+            // 更新音频录制状态
+            isRecordingAudio = decibelManager.isRecordingAudioFile()
+            print("📊 测量已启动 - 音频录制状态: \(isRecordingAudio)")
+            
             startStatisticsTimer()
         }
     }
@@ -147,6 +158,10 @@ class DecibelMeterViewModel: ObservableObject {
     func stopMeasurement() {
         decibelManager.stopMeasurement()
         stopStatisticsTimer()
+        
+        // 更新音频录制状态
+        isRecordingAudio = false
+        print("⏹️ 测量已停止 - 音频录制状态: \(isRecordingAudio)")
     }
     
     /// 清除历史记录
@@ -524,6 +539,13 @@ extension DecibelMeterViewModel {
     private func updateStatistics() {
         // 实时更新LEQ值（不需要等待测量结束）
         leqDecibel = decibelManager.getDecibelMeterRealTimeLeq()
+        
+        // 更新音频录制状态（确保UI实时同步）
+        let currentRecordingState = decibelManager.isRecordingAudioFile()
+        if isRecordingAudio != currentRecordingState {
+            isRecordingAudio = currentRecordingState
+            print("🔄 音频录制状态已更新: \(isRecordingAudio)")
+        }
         
         // 如果有完整统计信息，也更新它
         if let statistics = decibelManager.getCurrentStatistics() {
