@@ -256,6 +256,11 @@ struct DecibelMeterView: View {
     }
     
     /// 播放音频文件
+    ///
+    /// **与竞品一致的行为**：
+    /// - 播放时测量持续进行，不会暂停
+    /// - 播放的声音会被麦克风捕获并测量
+    /// - 音频会话保持 `.playAndRecord` 模式
     private func playAudio(fileInfo: AudioFileInfo) {
         // 如果正在播放其他文件，先停止
         if isPlaying, currentPlayingFile?.url != fileInfo.url {
@@ -296,13 +301,14 @@ struct DecibelMeterView: View {
                 return
             }
             
-            // 在播放前设置音频会话（必须在创建播放器之前）
+            // 在播放前确保音频会话配置正确
+            // 保持 .playAndRecord 模式，测量持续进行
             try setupAudioSessionForPlayback()
             
             // 创建播放器
             let player = try AVAudioPlayer(contentsOf: fileInfo.url)
             player.delegate = audioPlayerObserver
-            player.volume = 1.0 // 确保音量已设置
+            player.volume = 1.0 // 设置音量为最大
             
             // 准备播放，确保资源已加载
             guard player.prepareToPlay() else {
@@ -330,6 +336,19 @@ struct DecibelMeterView: View {
                 DispatchQueue.main.async {
                     self.isPlaying = false
                     self.currentPlayingFile = nil
+                    
+                    // 🔊 恢复输入增益到测量模式（0.0 → 0.3）
+                    let audioSession = AVAudioSession.sharedInstance()
+                    if audioSession.isInputGainSettable {
+                        do {
+                            try audioSession.setInputGain(0.3)
+                            print("🔊 播放完成：输入增益 0.0 → 0.3（恢复测量精度）")
+                        } catch {
+                            print("⚠️ 恢复输入增益失败: \(error.localizedDescription)")
+                        }
+                    }
+                    
+                    print("✅ 播放完成")
                 }
             }
             
@@ -344,6 +363,7 @@ struct DecibelMeterView: View {
                 print("   持续时间: \(String(format: "%.2f", player.duration)) 秒")
                 print("   采样率: \(player.format.sampleRate) Hz")
                 print("   通道数: \(player.format.channelCount)")
+                print("   📊 测量持续进行，播放声音会被测量")
             } else {
                 saveErrorMessage = "播放启动失败，请检查音频会话设置"
                 showSaveErrorAlert = true
@@ -370,6 +390,19 @@ struct DecibelMeterView: View {
         audioPlayer = nil
         isPlaying = false
         currentPlayingFile = nil
+        
+        // 🔊 恢复输入增益到测量模式（0.0 → 0.3）
+        let audioSession = AVAudioSession.sharedInstance()
+        if audioSession.isInputGainSettable {
+            do {
+                try audioSession.setInputGain(0.3)
+                print("🔊 停止播放：输入增益 0.0 → 0.3（恢复测量精度）")
+            } catch {
+                print("⚠️ 恢复输入增益失败: \(error.localizedDescription)")
+            }
+        }
+        
+        print("⏹️ 停止播放（测量持续进行）")
     }
     
     /// 分享音频文件
@@ -430,64 +463,27 @@ struct DecibelMeterView: View {
         }
     }
     
-    /// 设置音频会话用于播放（仅在播放时调用，避免与录音冲突）
+    /// 优化播放音量
+    ///
+    /// **核心优化**：动态降低输入增益，最大化播放音量
+    /// - DecibelMeterManager 已配置好音频会话（.playAndRecord + .spokenAudio）
+    /// - 这里只需调整输入增益即可提升播放音量
     private func setupAudioSessionForPlayback() throws {
         let audioSession = AVAudioSession.sharedInstance()
-        let manager = DecibelMeterManager.shared
-        let isRecording = manager.isRecordingAudioFile()
         
-        // 如果正在录音，使用 playAndRecord 模式以支持同时录音和播放
-        // 如果不在录音，使用 playback 模式（更简单，性能更好）
-        if isRecording {
-            print("⚠️ 正在录音中，使用 playAndRecord 模式以支持同时播放")
-            
-            // 检查当前类别，如果不是 playAndRecord，则切换
-            let currentCategory = audioSession.category
-            if currentCategory != .playAndRecord {
-                // 先设置类别（不需要先停用）
-                do {
-                    try audioSession.setCategory(
-                        .playAndRecord,
-                        mode: .default,
-                        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
-                    )
-                    print("✅ 已切换音频会话类别为 playAndRecord")
-                } catch {
-                    print("❌ 设置 playAndRecord 类别失败: \(error.localizedDescription)")
-                    // 不抛出错误，尝试继续
-                }
+        // 🔊 核心优化：降低输入增益到最小值，最大化播放音量
+        // 输入增益 ↓ → 麦克风灵敏度 ↓ → 系统对播放音量的压制 ↓ → 播放音量 ↑
+        if audioSession.isInputGainSettable {
+            do {
+                try audioSession.setInputGain(0.0)  // 最小增益 = 最大播放音量
+                print("🔊 播放优化：输入增益 0.3 → 0.0（最大化播放音量）")
+                print("   - Current Gain: \(audioSession.inputGain)")
+                print("   - Output Volume: \(audioSession.outputVolume)")
+            } catch {
+                print("⚠️ 设置输入增益失败: \(error.localizedDescription)")
             }
         } else {
-            print("ℹ️ 不在录音，使用 playback 模式")
-            
-            // 检查当前类别，如果不是 playback，则切换
-            let currentCategory = audioSession.category
-            if currentCategory != .playback {
-                // 先设置类别（不需要先停用）
-                do {
-                    try audioSession.setCategory(
-                        .playback,
-                        mode: .default,
-                        options: [.mixWithOthers]
-                    )
-                    print("✅ 已切换音频会话类别为 playback")
-                } catch {
-                    print("❌ 设置 playback 类别失败: \(error.localizedDescription)")
-                    // 不抛出错误，尝试继续
-                }
-            }
-        }
-        
-        // 激活音频会话
-        // 如果会话已经在激活状态，setActive(true) 也是安全的，不会报错
-        do {
-            try audioSession.setActive(true, options: [])
-            print("✅ 音频会话已激活")
-        } catch {
-            // 如果激活失败，可能是因为会话已经在激活状态或无法激活
-            // 这在某些情况下是正常的，不一定是错误
-            print("⚠️ 激活音频会话时遇到问题（可能已经激活）: \(error.localizedDescription)")
-            // 不抛出错误，继续尝试播放
+            print("⚠️ 当前设备不支持输入增益调整")
         }
     }
 }

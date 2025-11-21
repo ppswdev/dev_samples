@@ -2289,28 +2289,79 @@ class DecibelMeterManager: NSObject {
     // MARK: - 私有方法
     
     /// 设置音频会话
+    ///
+    /// **音量优化配置**：
+    /// - Category: `.playAndRecord` - 同时支持音频采集和播放
+    /// - Mode: `.spokenAudio` - 语音模式，提供较好的播放音量同时支持采集
+    /// - Options:
+    ///   - `.defaultToSpeaker`: 默认使用扬声器
+    ///   - `.allowBluetoothA2DP`: 支持蓝牙高品质音频
+    ///   - `.allowAirPlay`: 支持 AirPlay
+    ///
+    /// **功能支持**：
+    /// - ✅ 持续进行音频采集（分贝测量不中断）
+    /// - ✅ 同时播放录音文件（播放音量更大）
+    /// - ✅ 播放的声音会被麦克风捕获并测量
+    /// - ✅ 支持蓝牙和 AirPlay 设备
+    ///
+    /// **音量优化说明**：
+    /// - `.spokenAudio` 模式比 `.measurement` 提供更好的播放音量
+    /// - 移除 `.mixWithOthers`，使用 `.defaultToSpeaker` 确保音量
+    /// - 设置输入增益为 0（避免过度增益导致播放音量降低）
     private func setupAudioSession() {
         do {
-            // 首先停用当前音频会话
-            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            // 首先停用当前音频会话（如果已激活）
+            if audioSession.isOtherAudioPlaying || audioSession.category != .playAndRecord {
+                try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            }
             
-            // 配置音频会话支持后台录制
-            // 移除不兼容的选项，简化配置以避免错误
+            // ⭐ 音量优化配置：使用 .spokenAudio 模式
+            // .spokenAudio 模式在保持采集能力的同时，提供更好的播放音量
+            // 比 .measurement 模式的播放音量更大
             try audioSession.setCategory(
-                .record,
-                mode: .measurement,
-                options: [.allowBluetooth]
+                .playAndRecord,         // ✅ 同时支持播放和录音
+                mode: .spokenAudio,     // 🔊 优化：语音模式，播放音量更大
+                options: [
+                    .defaultToSpeaker,      // 🔊 关键：默认使用扬声器，提升音量
+                    .allowBluetoothA2DP,    // ✅ 支持蓝牙高品质音频（A2DP协议）
+                    .allowAirPlay           // ✅ 支持 AirPlay
+                ]
             )
             
             // 设置音频会话参数
             try audioSession.setPreferredSampleRate(44100.0)
-            try audioSession.setPreferredIOBufferDuration(0.005) // 5ms缓冲区，提高响应速度
+            try audioSession.setPreferredIOBufferDuration(0.005) // 5ms缓冲区
             
-            // 重新激活音频会话
+            // 🔊 关键：设置输入增益为较低值，避免过度增益导致播放音量被压缩
+            // inputGain 范围 0.0 - 1.0，较低的值可以提升播放音量
+            if audioSession.isInputGainSettable {
+                do {
+                    try audioSession.setInputGain(0.3) // 降低输入增益，提升播放音量
+                    print("🔊 已设置输入增益为 0.3（优化播放音量）")
+                } catch {
+                    print("⚠️ 设置输入增益失败: \(error.localizedDescription)")
+                }
+            }
+            
+            // 激活音频会话
             try audioSession.setActive(true, options: [])
             
+            // 🔊 强制使用扬声器输出（确保最大音量）
+            try audioSession.overrideOutputAudioPort(.speaker)
+            
+            print("✅ 音频会话配置成功（音量优化模式）")
+            print("   - Category: \(audioSession.category.rawValue)")
+            print("   - Mode: \(audioSession.mode.rawValue) 🔊")
+            print("   - 持续采集: ✅（播放时不中断）")
+            print("   - 播放声音被测量: ✅")
+            print("   - 音频输出: 扬声器（优化音量）🔊")
+            print("   - Input Gain: \(audioSession.inputGain)")
+            print("   - Output Route: \(audioSession.currentRoute.outputs.first?.portType.rawValue ?? "unknown")")
+            print("   - Output Volume: \(audioSession.outputVolume)")
+            
         } catch {
-            print("设置音频会话失败: \(error)")
+            print("❌ 设置音频会话失败: \(error.localizedDescription)")
+            print("   错误详情: \(error)")
             updateState(.error("音频会话配置失败: \(error.localizedDescription)"))
         }
     }
@@ -2790,6 +2841,90 @@ class DecibelMeterManager: NSObject {
     /// - Returns: 是否正在录制音频到文件
     func isRecordingAudioFile() -> Bool {
         return isRecordingAudio
+    }
+    
+    /// 检查是否正在进行测量（音频采集）
+    ///
+    /// - Returns: 是否正在进行分贝测量（音频采集中）
+    ///
+    /// **用途**：
+    /// - 判断音频引擎是否正在运行并采集音频
+    /// - 在播放音频前检查，确保不会切换到不兼容的音频会话模式
+    ///
+    /// **注意**：
+    /// - 如果音频引擎已暂停（`pauseAudioCapture()`），此方法返回 `false`
+    /// - 这样可以在播放时自动切换到纯播放模式，确保音量正常
+    ///
+    /// **使用示例**：
+    /// ```swift
+    /// if manager.isMeasuring() {
+    ///     // 正在测量且引擎运行中，需要保持 .playAndRecord 模式
+    /// }
+    /// ```
+    func isMeasuring() -> Bool {
+        // 检查测量状态、音频引擎存在且正在运行
+        return measurementState == .measuring && audioEngine?.isRunning == true
+    }
+    
+    // MARK: - 音频采集暂停/恢复（用于播放优化）
+    
+    /// 暂停音频采集（保持测量状态，但停止音频引擎）
+    ///
+    /// **用途**：在播放音频时临时暂停采集，避免回声消除影响播放音量
+    ///
+    /// **注意**：
+    /// - 暂停期间，分贝测量会停止
+    /// - 录音文件写入会停止（但已写入的数据保留）
+    /// - 播放完成后应调用 `resumeAudioCapture()` 恢复
+    ///
+    /// - Returns: 是否成功暂停（如果不在测量中则返回 false）
+    @discardableResult
+    func pauseAudioCapture() -> Bool {
+        guard measurementState == .measuring, let engine = audioEngine else {
+            print("⚠️ 无法暂停音频采集：未在测量中")
+            return false
+        }
+        
+        // 停止音频引擎（但不改变测量状态）
+        engine.pause()
+        
+        print("⏸️ 音频采集已暂停（播放音频时优化音量）")
+        print("   - 测量状态保持: \(measurementState)")
+        print("   - 音频引擎已暂停")
+        
+        return true
+    }
+    
+    /// 恢复音频采集
+    ///
+    /// **用途**：播放音频完成后恢复采集
+    ///
+    /// - Returns: 是否成功恢复（如果不在测量中则返回 false）
+    @discardableResult
+    func resumeAudioCapture() -> Bool {
+        guard measurementState == .measuring, let engine = audioEngine else {
+            print("⚠️ 无法恢复音频采集：未在测量中")
+            return false
+        }
+        
+        // 如果引擎已经在运行，不需要再次启动
+        if engine.isRunning {
+            print("ℹ️ 音频引擎已经在运行，无需恢复")
+            return true
+        }
+        
+        do {
+            // 重新启动音频引擎
+            try engine.start()
+            
+            print("▶️ 音频采集已恢复")
+            print("   - 音频引擎已重启")
+            
+            return true
+        } catch {
+            print("❌ 恢复音频采集失败: \(error.localizedDescription)")
+            return false
+        }
     }
 }
 
