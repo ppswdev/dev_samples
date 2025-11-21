@@ -404,6 +404,29 @@ class DecibelMeterManager: NSObject {
     
     /// 分贝值上限（dB），用于限制异常高值
     private let maxDecibelLimit: Double = 140.0
+
+     // MARK: - 音频录制相关属性
+    
+    /// 音频文件对象，用于写入录音数据
+    private var audioFile: AVAudioFile?
+    
+    /// 是否正在录制音频到文件
+    private var isRecordingAudio: Bool = false
+    
+    /// 音频录制开始时间
+    private var recordingStartTime: Date?
+    
+    /// 音频录制队列，用于异步写入文件
+    private let recordingQueue = DispatchQueue(label: "com.decibelmeter.recording", qos: .utility)
+    
+    /// 文件访问队列，用于安全地复制文件
+    private let fileAccessQueue = DispatchQueue(label: "com.decibelmeter.fileaccess", qos: .utility)
+    
+    /// 历史记录队列，用于线程安全地访问 decibelMeterHistory 和 noiseMeterHistory
+    private let historyQueue = DispatchQueue(label: "com.decibelmeter.history", qos: .userInitiated)
+    
+    /// 临时录音文件名（固定）
+    private let tempRecordingFileName = "recording_temp.m4a"
     
     // MARK: - 初始化
     
@@ -426,23 +449,38 @@ class DecibelMeterManager: NSObject {
     /// **功能**：
     /// - 请求麦克风权限
     /// - 启动音频引擎
+    /// - 开始音频录制（如果启用）
     /// - 开始后台任务
     /// - 初始化统计值（MIN、MAX、PEAK）
     /// - 记录测量开始时间
     ///
     /// **注意**：此方法是异步的，需要使用await调用
     ///
+    /// - Parameter enableRecording: 是否同时开始音频录制，默认为true
+    ///
     /// **使用示例**：
     /// ```swift
-    /// await manager.startMeasurement()
+    /// await manager.startMeasurement(enableRecording: true)
     /// ```
-    func startMeasurement() async {
+    func startMeasurement(enableRecording: Bool = true) async {
         guard measurementState != .measuring else { return }
         
         do {
             try await requestMicrophonePermission()
             try setupAudioEngine()
             try startAudioEngine()
+            
+            // ⭐ 新增：如果需要录制，开始音频录制
+            if enableRecording {
+                do {
+                    try startAudioRecording()
+                } catch {
+                    print("❌ 启动音频录制失败: \(error)")
+                    // 即使录制失败，也继续测量（不强制要求录制）
+                    // 如果录制是必需的，可以在这里抛出错误
+                    // throw error
+                }
+            }
             
             // 开始后台任务
             startBackgroundTask()
@@ -457,7 +495,10 @@ class DecibelMeterManager: NSObject {
             isRecording = true
             
         } catch {
-            updateState(.error("启动测量失败: \(error.localizedDescription)"))
+            let errorMessage = "启动测量失败: \(error.localizedDescription)"
+            print("❌ \(errorMessage)")
+            print("   错误类型: \(type(of: error))")
+            updateState(.error(errorMessage))
         }
     }
     
@@ -467,6 +508,7 @@ class DecibelMeterManager: NSObject {
     ///
     /// **功能**：
     /// - 停止音频引擎
+    /// - 停止音频录制并删除临时文件
     /// - 结束后台任务
     /// - 计算最终统计信息（如果有测量数据）
     /// - 更新状态为idle
@@ -478,12 +520,20 @@ class DecibelMeterManager: NSObject {
     func stopMeasurement() {
         stopAudioEngine()
         
+        // ⭐ 新增：停止音频录制并删除临时文件
+        if isRecordingAudio {
+            stopAudioRecording()
+        }
+        
         // 结束后台任务
         endBackgroundTask()
         
-        // 计算最终统计信息
-        if !decibelMeterHistory.isEmpty {
-            currentStatistics = calculateStatistics(from: decibelMeterHistory)
+        // 计算最终统计信息（线程安全）
+        let history = historyQueue.sync {
+            return decibelMeterHistory
+        }
+        if !history.isEmpty {
+            currentStatistics = calculateStatistics(from: history)
         }
         
         updateState(.idle)
@@ -510,14 +560,18 @@ class DecibelMeterManager: NSObject {
         return (currentDecibel, maxDecibel, minDecibel)
     }
     
-    /// 获取分贝计测量历史
+    /// 获取分贝计测量历史（线程安全）
     func getDecibelMeterHistory() -> [DecibelMeasurement] {
-        return decibelMeterHistory
+        return historyQueue.sync {
+            return decibelMeterHistory
+        }
     }
     
-    /// 获取噪音测量计测量历史
+    /// 获取噪音测量计测量历史（线程安全）
     func getNoiseMeterHistory() -> [DecibelMeasurement] {
-        return noiseMeterHistory
+        return historyQueue.sync {
+            return noiseMeterHistory
+        }
     }
     
     
@@ -582,18 +636,22 @@ class DecibelMeterManager: NSObject {
         return currentStatistics
     }
     
-    /// 获取分贝计实时LEQ值
+    /// 获取分贝计实时LEQ值（线程安全）
     func getDecibelMeterRealTimeLeq() -> Double {
-        guard !decibelMeterHistory.isEmpty else { return 0.0 }
-        let decibelValues = decibelMeterHistory.map { $0.calibratedDecibel }
-        return calculateLeq(from: decibelValues)
+        return historyQueue.sync {
+            guard !decibelMeterHistory.isEmpty else { return 0.0 }
+            let decibelValues = decibelMeterHistory.map { $0.calibratedDecibel }
+            return calculateLeq(from: decibelValues)
+        }
     }
     
-    /// 获取噪音测量计实时LEQ值
+    /// 获取噪音测量计实时LEQ值（线程安全）
     func getNoiseMeterRealTimeLeq() -> Double {
-        guard !noiseMeterHistory.isEmpty else { return 0.0 }
-        let decibelValues = noiseMeterHistory.map { $0.calibratedDecibel }
-        return calculateLeq(from: decibelValues)
+        return historyQueue.sync {
+            guard !noiseMeterHistory.isEmpty else { return 0.0 }
+            let decibelValues = noiseMeterHistory.map { $0.calibratedDecibel }
+            return calculateLeq(from: decibelValues)
+        }
     }
     
     /// 获取实时LEQ值（兼容性方法，返回分贝计的LEQ）
@@ -606,22 +664,28 @@ class DecibelMeterManager: NSObject {
         return peakDecibel
     }
     
-    /// 获取噪音测量计最大值
+    /// 获取噪音测量计最大值（线程安全）
     func getNoiseMeterMax() -> Double {
-        guard !noiseMeterHistory.isEmpty else { return -1.0 }
-        return noiseMeterHistory.map { $0.fastDecibel }.max() ?? -1.0
+        return historyQueue.sync {
+            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+            return noiseMeterHistory.map { $0.fastDecibel }.max() ?? -1.0
+        }
     }
     
-    /// 获取噪音测量计最小值
+    /// 获取噪音测量计最小值（线程安全）
     func getNoiseMeterMin() -> Double {
-        guard !noiseMeterHistory.isEmpty else { return -1.0 }
-        return noiseMeterHistory.map { $0.fastDecibel }.min() ?? -1.0
+        return historyQueue.sync {
+            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+            return noiseMeterHistory.map { $0.fastDecibel }.min() ?? -1.0
+        }
     }
     
-    /// 获取噪音测量计峰值
+    /// 获取噪音测量计峰值（线程安全）
     func getNoiseMeterPeak() -> Double {
-        guard !noiseMeterHistory.isEmpty else { return -1.0 }
-        return noiseMeterHistory.map { $0.rawDecibel }.max() ?? -1.0
+        return historyQueue.sync {
+            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+            return noiseMeterHistory.map { $0.rawDecibel }.max() ?? -1.0
+        }
     }
     
     // MARK: - 扩展的公共获取方法
@@ -874,8 +938,13 @@ class DecibelMeterManager: NSObject {
         let now = Date()
         let startTime = now.addingTimeInterval(-timeRange)
         
+        // 线程安全地获取历史记录的副本
+        let history = historyQueue.sync {
+            return decibelMeterHistory
+        }
+        
         // 过滤指定时间范围内的数据
-        let filteredMeasurements = decibelMeterHistory.filter { measurement in
+        let filteredMeasurements = history.filter { measurement in
             measurement.timestamp >= startTime
         }
         
@@ -1051,7 +1120,12 @@ class DecibelMeterManager: NSObject {
     /// print("L90: \(distribution.l90) dB") // 背景噪声
     /// ```
     func getStatisticalDistributionChartData() -> StatisticalDistributionChartData {
-        guard !decibelMeterHistory.isEmpty else {
+        // 线程安全地获取历史记录的副本
+        let history = historyQueue.sync {
+            return decibelMeterHistory
+        }
+        
+        guard !history.isEmpty else {
             return StatisticalDistributionChartData(
                 dataPoints: [],
                 l10: 0.0,
@@ -1061,7 +1135,7 @@ class DecibelMeterManager: NSObject {
             )
         }
         
-        let decibelValues = decibelMeterHistory.map { $0.calibratedDecibel }.sorted()
+        let decibelValues = history.map { $0.calibratedDecibel }.sorted()
         
         // 计算各百分位数
         let percentiles: [Double] = [10, 20, 30, 40, 50, 60, 70, 80, 90]
@@ -1140,7 +1214,12 @@ class DecibelMeterManager: NSObject {
     /// }
     /// ```
     func getLEQTrendChartData(interval: TimeInterval = 10.0) -> LEQTrendChartData {
-        guard !decibelMeterHistory.isEmpty else {
+        // 线程安全地获取历史记录的副本
+        let history = historyQueue.sync {
+            return decibelMeterHistory
+        }
+        
+        guard !history.isEmpty else {
             return LEQTrendChartData(
                 dataPoints: [],
                 timeRange: 0.0,
@@ -1153,14 +1232,14 @@ class DecibelMeterManager: NSObject {
         var dataPoints: [LEQTrendDataPoint] = []
         var cumulativeLeq = 0.0
         
-        let startTime = decibelMeterHistory.first!.timestamp
-        let endTime = decibelMeterHistory.last!.timestamp
+        let startTime = history.first!.timestamp
+        let endTime = history.last!.timestamp
         let totalDuration = endTime.timeIntervalSince(startTime)
         
         var currentTime = startTime
         var currentGroup: [DecibelMeasurement] = []
         
-        for measurement in decibelMeterHistory {
+        for measurement in history {
             if measurement.timestamp.timeIntervalSince(currentTime) >= interval {
                 // 计算当前组的LEQ
                 if !currentGroup.isEmpty {
@@ -1168,7 +1247,7 @@ class DecibelMeterManager: NSObject {
                     let groupLeq = calculateLeq(from: groupDecibelValues)
                     
                     // 计算累积LEQ
-                    let allPreviousValues = decibelMeterHistory
+                    let allPreviousValues = history
                         .filter { $0.timestamp <= measurement.timestamp }
                         .map { $0.calibratedDecibel }
                     cumulativeLeq = calculateLeq(from: allPreviousValues)
@@ -1240,9 +1319,11 @@ class DecibelMeterManager: NSObject {
             stopMeasurement()
         }
         
-        // 清除所有数据
-        decibelMeterHistory.removeAll()
-        noiseMeterHistory.removeAll()
+        // 清除所有数据（线程安全）
+        historyQueue.sync {
+            decibelMeterHistory.removeAll()
+            noiseMeterHistory.removeAll()
+        }
         currentMeasurement = nil
         currentStatistics = nil
         measurementStartTime = nil
@@ -1322,17 +1403,19 @@ class DecibelMeterManager: NSObject {
         // 清理频谱缓存
         cachedSpectrum = nil
         
-        // 如果历史记录过多，进一步清理
-        if decibelMeterHistory.count > maxHistoryCount / 2 {
-            let removeCount = decibelMeterHistory.count / 2
-            decibelMeterHistory.removeFirst(removeCount)
-            print("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
-        }
-        
-        if noiseMeterHistory.count > maxHistoryCount / 2 {
-            let removeCount = noiseMeterHistory.count / 2
-            noiseMeterHistory.removeFirst(removeCount)
-            print("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
+        // 如果历史记录过多，进一步清理（线程安全）
+        historyQueue.sync {
+            if decibelMeterHistory.count > maxHistoryCount / 2 {
+                let removeCount = decibelMeterHistory.count / 2
+                decibelMeterHistory.removeFirst(removeCount)
+                print("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
+            }
+            
+            if noiseMeterHistory.count > maxHistoryCount / 2 {
+                let removeCount = noiseMeterHistory.count / 2
+                noiseMeterHistory.removeFirst(removeCount)
+                print("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
+            }
         }
         
         // 强制垃圾回收
@@ -1533,7 +1616,12 @@ class DecibelMeterManager: NSObject {
     func getDoseAccumulationChartData(interval: TimeInterval = 60.0, standard: NoiseStandard? = nil) -> DoseAccumulationChartData {
         let useStandard = standard ?? currentNoiseStandard
         
-        guard !noiseMeterHistory.isEmpty else {
+        // 线程安全地获取历史记录的副本
+        let history = historyQueue.sync {
+            return noiseMeterHistory
+        }
+        
+        guard !history.isEmpty else {
             return DoseAccumulationChartData(
                 dataPoints: [],
                 currentDose: 0.0,
@@ -1545,15 +1633,15 @@ class DecibelMeterManager: NSObject {
         }
         
         var dataPoints: [DoseAccumulationPoint] = []
-        let startTime = noiseMeterHistory.first!.timestamp
+        let startTime = history.first!.timestamp
         var currentTime = startTime
         var currentGroup: [DecibelMeasurement] = []
         
-        for measurement in noiseMeterHistory {
+        for measurement in history {
             if measurement.timestamp.timeIntervalSince(currentTime) >= interval {
                 // 计算当前时间点的累积剂量
                 if !currentGroup.isEmpty {
-                    let allPreviousValues = noiseMeterHistory
+                    let allPreviousValues = history
                         .filter { $0.timestamp <= measurement.timestamp }
                         .map { $0.calibratedDecibel }
                     
@@ -1627,7 +1715,12 @@ class DecibelMeterManager: NSObject {
     func getTWATrendChartData(interval: TimeInterval = 60.0, standard: NoiseStandard? = nil) -> TWATrendChartData {
         let useStandard = standard ?? currentNoiseStandard
         
-        guard !noiseMeterHistory.isEmpty else {
+        // 线程安全地获取历史记录的副本
+        let history = historyQueue.sync {
+            return noiseMeterHistory
+        }
+        
+        guard !history.isEmpty else {
             return TWATrendChartData(
                 dataPoints: [],
                 currentTWA: 0.0,
@@ -1639,15 +1732,15 @@ class DecibelMeterManager: NSObject {
         }
         
         var dataPoints: [TWATrendDataPoint] = []
-        let startTime = noiseMeterHistory.first!.timestamp
+        let startTime = history.first!.timestamp
         var currentTime = startTime
         var currentGroup: [DecibelMeasurement] = []
         
-        for measurement in noiseMeterHistory {
+        for measurement in history {
             if measurement.timestamp.timeIntervalSince(currentTime) >= interval {
                 // 计算当前时间点的TWA
                 if !currentGroup.isEmpty {
-                    let allPreviousValues = noiseMeterHistory
+                    let allPreviousValues = history
                         .filter { $0.timestamp <= measurement.timestamp }
                         .map { $0.calibratedDecibel }
                     
@@ -2041,9 +2134,11 @@ class DecibelMeterManager: NSObject {
         )
     }
     
-    /// 清除分贝计测量历史
+    /// 清除分贝计测量历史（线程安全）
     func clearDecibelMeterHistory() {
-        decibelMeterHistory.removeAll()
+        historyQueue.sync {
+            decibelMeterHistory.removeAll()
+        }
         maxDecibel = -1.0
         minDecibel = -1.0   // 重置为未初始化状态
         peakDecibel = -1.0
@@ -2051,9 +2146,11 @@ class DecibelMeterManager: NSObject {
         measurementStartTime = nil
     }
     
-    /// 清除噪音测量计测量历史
+    /// 清除噪音测量计测量历史（线程安全）
     func clearNoiseMeterHistory() {
-        noiseMeterHistory.removeAll()
+        historyQueue.sync {
+            noiseMeterHistory.removeAll()
+        }
     }
     
     /// 清除测量历史（兼容性方法，清除分贝计历史）
@@ -2346,18 +2443,37 @@ class DecibelMeterManager: NSObject {
         // 更新噪音测量计数据
         updateNoiseMeterData(noiseMeterMeasurement)
         
-        // 添加到各自的历史记录
-        decibelMeterHistory.append(decibelMeterMeasurement)
-        noiseMeterHistory.append(noiseMeterMeasurement)
-        
-        // 优化历史记录长度管理 - 批量移除以提高性能
-        if decibelMeterHistory.count >= maxHistoryCount {
-            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
-            decibelMeterHistory.removeFirst(removeCount)
+        // ⭐ 新增：如果正在录制，将缓冲区写入文件
+        if isRecordingAudio, let file = audioFile {
+            recordingQueue.async { [weak self] in
+                do {
+                    // 写入音频缓冲区
+                    try file.write(from: buffer)
+                } catch {
+                    print("❌ 写入音频文件失败: \(error.localizedDescription)")
+                    // 如果写入失败，停止录制以避免持续错误
+                    DispatchQueue.main.async {
+                        self?.stopAudioRecording()
+                    }
+                }
+            }
         }
-        if noiseMeterHistory.count >= maxHistoryCount {
-            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
-            noiseMeterHistory.removeFirst(removeCount)
+        
+        // 线程安全地添加到各自的历史记录并管理长度
+        historyQueue.sync {
+            // 添加到各自的历史记录
+            decibelMeterHistory.append(decibelMeterMeasurement)
+            noiseMeterHistory.append(noiseMeterMeasurement)
+            
+            // 优化历史记录长度管理 - 批量移除以提高性能
+            if decibelMeterHistory.count >= maxHistoryCount {
+                let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+                decibelMeterHistory.removeFirst(removeCount)
+            }
+            if noiseMeterHistory.count >= maxHistoryCount {
+                let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+                noiseMeterHistory.removeFirst(removeCount)
+            }
         }
         
         // 定期检查内存使用情况
@@ -2480,6 +2596,200 @@ class DecibelMeterManager: NSObject {
         }
         return cachedSpectrum ?? []
     }
+    
+    // MARK: - 音频录制方法
+    
+    /// 获取临时录制文件路径（固定文件名）
+    ///
+    /// - Returns: 临时录音文件的URL
+    private func getTempRecordingURL() -> URL {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsPath.appendingPathComponent(tempRecordingFileName)
+    }
+    
+    /// 开始音频录制到临时文件
+    ///
+    /// 使用固定的临时文件名 `recording_temp.m4a`
+    /// 如果文件已存在，会先删除
+    ///
+    /// - Throws: DecibelMeterError 如果录制启动失败
+    func startAudioRecording() throws {
+        guard audioEngine != nil else {
+            throw DecibelMeterError.audioEngineSetupFailed
+        }
+        
+        // 如果已经在录制，先停止
+        if isRecordingAudio {
+            stopAudioRecording()
+        }
+        
+        let tempURL = getTempRecordingURL()
+        
+        // 删除已存在的临时文件
+        if FileManager.default.fileExists(atPath: tempURL.path) {
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+        
+        // 创建音频格式
+        guard let inputNode = inputNode,
+              let format = audioEngine?.inputNode.outputFormat(forBus: 0) else {
+            throw DecibelMeterError.inputNodeNotFound
+        }
+        
+        // 构建音频文件设置（手动构建以确保完整性）
+        let audioSettings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),  // M4A格式
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+        ]
+        
+        // 创建临时录音文件
+        do {
+            audioFile = try AVAudioFile(forWriting: tempURL, settings: audioSettings)
+            isRecordingAudio = true
+            recordingStartTime = Date()
+            
+            print("✅ 开始录制到临时文件: \(tempRecordingFileName)")
+            print("   音频格式: 采样率=\(format.sampleRate)Hz, 通道数=\(format.channelCount), 格式=M4A")
+        } catch {
+            print("❌ 创建音频文件失败: \(error.localizedDescription)")
+            print("   错误详情: \(error)")
+            throw DecibelMeterError.audioFileWriteFailed
+        }
+    }
+    
+    /// 停止音频录制并删除临时文件
+    ///
+    /// 关闭音频文件并删除临时录音文件
+    func stopAudioRecording() {
+        guard isRecordingAudio else { return }
+        
+        // 关闭文件
+        audioFile = nil
+        isRecordingAudio = false
+        
+        // 删除临时文件
+        let tempURL = getTempRecordingURL()
+        fileAccessQueue.async { [weak self] in
+            guard let self = self else { return }
+            if FileManager.default.fileExists(atPath: tempURL.path) {
+                do {
+                    // 稍微延迟一下，确保文件完全关闭
+                    Thread.sleep(forTimeInterval: 0.1)
+                    try FileManager.default.removeItem(at: tempURL)
+                    print("🗑️ 已删除临时录音文件")
+                } catch {
+                    print("⚠️ 删除临时文件失败: \(error.localizedDescription)")
+                }
+            }
+            self.recordingStartTime = nil
+        }
+    }
+    
+    /// 复制当前正在录制的音频文件到指定路径（录制过程中可调用）
+    ///
+    /// **重要说明**：
+    /// - 此方法可以在录制过程中调用
+    /// - 复制的是调用时**已写入的数据**（文件快照）
+    /// - 复制完成后，源文件会继续写入，但复制的文件不会更新
+    /// - 如果录制还在进行，复制的文件可能不完整
+    /// - 如果需要完整文件，应在录制停止后再复制一次
+    ///
+    /// - Parameters:
+    ///   - destinationURL: 目标文件路径
+    ///   - completion: 完成回调，返回复制结果和文件信息
+    ///   - result: 复制结果（成功包含目标URL，失败包含错误）
+    ///   - fileSize: 复制的文件大小（字节）
+    ///   - isComplete: 是否完整（false表示录制还在进行中）
+    func copyRecordingFile(to destinationURL: URL,
+                          completion: @escaping (_ result: Result<URL, Error>, _ fileSize: Int64, _ isComplete: Bool) -> Void) {
+        let tempURL = getTempRecordingURL()
+        let fileManager = FileManager.default
+        let currentlyRecording = isRecordingAudio
+        
+        // 检查源文件是否存在
+        guard fileManager.fileExists(atPath: tempURL.path) else {
+            completion(.failure(DecibelMeterError.audioFileNotFound), 0, false)
+            return
+        }
+        
+        // 在后台队列执行复制（使用专门的队列避免阻塞写入）
+        fileAccessQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // 确保目标目录存在
+                let destinationDir = destinationURL.deletingLastPathComponent()
+                try? fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
+                
+                // 删除已存在的目标文件
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    try? fileManager.removeItem(at: destinationURL)
+                }
+                
+                // ⭐ 注意：AVAudioFile 在写入时会自动同步数据到磁盘
+                // 文件系统会确保数据的一致性，允许在写入过程中复制文件
+                // 复制的文件包含复制时刻已写入的数据（文件快照）
+                
+                // 获取源文件大小（复制前的状态）
+                let sourceAttributes = try fileManager.attributesOfItem(atPath: tempURL.path)
+                let sourceFileSize = sourceAttributes[.size] as? Int64 ?? 0
+                
+                // 复制文件（可能在写入过程中）
+                // iOS 文件系统允许在写入时复制，会复制当前已写入的部分
+                try fileManager.copyItem(at: tempURL, to: destinationURL)
+                
+                // 验证复制的文件
+                let destAttributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
+                let destFileSize = destAttributes[.size] as? Int64 ?? 0
+                
+                DispatchQueue.main.async {
+                    if destFileSize > 0 {
+                        print("✅ 录音文件已复制: \(destinationURL.lastPathComponent) (\(destFileSize) 字节)")
+                        if currentlyRecording {
+                            print("⚠️ 注意：录制还在进行中，复制的文件可能不完整")
+                        }
+                        completion(.success(destinationURL), destFileSize, !currentlyRecording)
+                    } else {
+                        completion(.failure(DecibelMeterError.invalidAudioFile), 0, false)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    print("❌ 复制录音文件失败: \(error.localizedDescription)")
+                    completion(.failure(error), 0, false)
+                }
+            }
+        }
+    }
+    
+    /// 获取当前录制文件的路径和信息
+    ///
+    /// - Returns: 文件信息元组 (URL, 文件大小, 是否正在录制)，如果文件不存在则返回nil
+    func getCurrentRecordingInfo() -> (url: URL, size: Int64, isRecording: Bool)? {
+        let tempURL = getTempRecordingURL()
+        let fileManager = FileManager.default
+        
+        guard fileManager.fileExists(atPath: tempURL.path) else {
+            return nil
+        }
+        
+        do {
+            let attributes = try fileManager.attributesOfItem(atPath: tempURL.path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            return (tempURL, fileSize, isRecordingAudio)
+        } catch {
+            return nil
+        }
+    }
+    
+    /// 检查是否正在录制音频
+    ///
+    /// - Returns: 是否正在录制音频到文件
+    func isRecordingAudioFile() -> Bool {
+        return isRecordingAudio
+    }
 }
 
 // MARK: - 错误类型
@@ -2489,6 +2799,9 @@ enum DecibelMeterError: LocalizedError {
     case audioEngineSetupFailed
     case inputNodeNotFound
     case audioSessionError
+    case audioFileNotFound
+    case invalidAudioFile
+    case audioFileWriteFailed
     
     var errorDescription: String? {
         switch self {
@@ -2500,6 +2813,12 @@ enum DecibelMeterError: LocalizedError {
             return "找不到输入节点"
         case .audioSessionError:
             return "音频会话错误"
+        case .audioFileNotFound:
+            return "找不到音频文件"
+        case .invalidAudioFile:
+            return "无效的音频文件"
+        case .audioFileWriteFailed:
+            return "写入音频文件失败"
         }
     }
 }

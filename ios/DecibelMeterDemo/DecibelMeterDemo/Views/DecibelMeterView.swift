@@ -15,12 +15,27 @@
 
 import SwiftUI
 import Charts
+import AVFoundation
 
 struct DecibelMeterView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
     @State private var showingFrequencyWeightingSheet = false
     @State private var showingTimeWeightingSheet = false
     @State private var showingCalibrationSheet = false
+    
+    // MARK: - 音频录制和播放相关状态
+    @State private var savedAudioFiles: [AudioFileInfo] = []
+    @State private var currentPlayingFile: AudioFileInfo?
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var isPlaying = false
+    @State private var showSaveSuccessAlert = false
+    @State private var showSaveErrorAlert = false
+    @State private var saveErrorMessage = ""
+    @State private var showShareSheet = false
+    @State private var shareFileURL: URL?
+    
+    // 音频播放器观察器
+    @StateObject private var audioPlayerObserver = AudioPlayerObserver()
     
     var body: some View {
         NavigationView {
@@ -43,6 +58,22 @@ struct DecibelMeterView: View {
                         
                         // 基础数据信息
                         DecibelBasicDataView(viewModel: viewModel)
+                        
+                        // 音频录制和播放控制
+                        AudioRecordingControlView(
+                            viewModel: viewModel,
+                            savedAudioFiles: $savedAudioFiles,
+                            currentPlayingFile: $currentPlayingFile,
+                            audioPlayer: $audioPlayer,
+                            isPlaying: $isPlaying,
+                            showSaveSuccessAlert: $showSaveSuccessAlert,
+                            showSaveErrorAlert: $showSaveErrorAlert,
+                            saveErrorMessage: $saveErrorMessage,
+                            onSave: { saveRecording() },
+                            onPlay: { fileInfo in playAudio(fileInfo: fileInfo) },
+                            onStop: { stopAudio() },
+                            onShare: { fileInfo in shareAudioFile(fileInfo: fileInfo) }
+                        )
                         
                         // 专业图表区域
                         VStack(spacing: 20) {
@@ -133,6 +164,323 @@ struct DecibelMeterView: View {
         }
         .sheet(isPresented: $showingCalibrationSheet) {
             CalibrationView(viewModel: viewModel)
+        }
+        .alert("保存成功", isPresented: $showSaveSuccessAlert) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text("录音已保存到 document/saved/ 目录")
+        }
+        .alert("保存失败", isPresented: $showSaveErrorAlert) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text(saveErrorMessage)
+        }
+        .onAppear {
+            loadSavedAudioFiles()
+        }
+        .onDisappear {
+            stopAudio()
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = shareFileURL {
+                ShareSheet(activityItems: [url])
+            }
+        }
+    }
+    
+    // MARK: - 音频录制和播放方法
+    
+    /// 保存当前录音到 document/saved/ 目录
+    private func saveRecording() {
+        let manager = DecibelMeterManager.shared
+        
+        // 检查是否正在录制
+        guard manager.isRecordingAudioFile() else {
+            saveErrorMessage = "当前没有正在录制的音频"
+            showSaveErrorAlert = true
+            return
+        }
+        
+        // 创建保存目录
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let savedDirectory = documentsPath.appendingPathComponent("saved")
+        
+        // 确保目录存在
+        do {
+            try FileManager.default.createDirectory(at: savedDirectory, withIntermediateDirectories: true)
+        } catch {
+            saveErrorMessage = "创建保存目录失败: \(error.localizedDescription)"
+            showSaveErrorAlert = true
+            return
+        }
+        
+        // 生成文件名（带时间戳）
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let fileName = "recording_\(dateFormatter.string(from: Date())).m4a"
+        let destinationURL = savedDirectory.appendingPathComponent(fileName)
+        
+        // 复制录音文件
+        manager.copyRecordingFile(to: destinationURL) { result, fileSize, isComplete in
+            switch result {
+            case .success(let url):
+                // 添加到保存列表
+                let fileInfo = AudioFileInfo(
+                    url: url,
+                    fileName: fileName,
+                    fileSize: fileSize,
+                    createdAt: Date(),
+                    isComplete: isComplete
+                )
+                
+                DispatchQueue.main.async {
+                    savedAudioFiles.append(fileInfo)
+                    showSaveSuccessAlert = true
+                    print("✅ 录音已保存: \(url.lastPathComponent) (\(fileSize) 字节)")
+                }
+                
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    saveErrorMessage = "保存失败: \(error.localizedDescription)"
+                    showSaveErrorAlert = true
+                }
+            }
+        }
+    }
+    
+    /// 播放音频文件
+    private func playAudio(fileInfo: AudioFileInfo) {
+        // 如果正在播放其他文件，先停止
+        if isPlaying, currentPlayingFile?.url != fileInfo.url {
+            stopAudio()
+        }
+        
+        // 如果已经在播放当前文件，则暂停/继续
+        if isPlaying, currentPlayingFile?.url == fileInfo.url {
+            if let player = audioPlayer {
+                if player.isPlaying {
+                    player.pause()
+                    isPlaying = false
+                } else {
+                    player.play()
+                    isPlaying = true
+                }
+            }
+            return
+        }
+        
+        // 开始播放新文件
+        do {
+            // 检查文件是否存在
+            guard FileManager.default.fileExists(atPath: fileInfo.url.path) else {
+                saveErrorMessage = "文件不存在: \(fileInfo.fileName)"
+                showSaveErrorAlert = true
+                print("❌ 文件不存在: \(fileInfo.url.path)")
+                return
+            }
+            
+            // 检查文件大小
+            let fileAttributes = try FileManager.default.attributesOfItem(atPath: fileInfo.url.path)
+            let fileSize = fileAttributes[.size] as? Int64 ?? 0
+            guard fileSize > 0 else {
+                saveErrorMessage = "文件为空，无法播放"
+                showSaveErrorAlert = true
+                print("❌ 文件为空: \(fileInfo.fileName)")
+                return
+            }
+            
+            // 在播放前设置音频会话（必须在创建播放器之前）
+            try setupAudioSessionForPlayback()
+            
+            // 创建播放器
+            let player = try AVAudioPlayer(contentsOf: fileInfo.url)
+            player.delegate = audioPlayerObserver
+            player.volume = 1.0 // 确保音量已设置
+            
+            // 准备播放，确保资源已加载
+            guard player.prepareToPlay() else {
+                saveErrorMessage = "播放器准备失败，可能文件格式不支持或文件损坏"
+                showSaveErrorAlert = true
+                print("❌ 播放器准备失败: \(fileInfo.fileName)")
+                print("   文件大小: \(fileSize) 字节")
+                print("   文件格式: \(fileInfo.url.pathExtension)")
+                return
+            }
+            
+            // 检查播放器是否有效
+            guard player.duration > 0 else {
+                saveErrorMessage = "音频文件无效或损坏，无法播放"
+                showSaveErrorAlert = true
+                print("❌ 音频文件无效: \(fileInfo.fileName)")
+                print("   持续时间: \(player.duration) 秒")
+                return
+            }
+            
+            audioPlayer = player
+            
+            // 设置播放完成回调
+            audioPlayerObserver.onPlaybackFinished = {
+                DispatchQueue.main.async {
+                    self.isPlaying = false
+                    self.currentPlayingFile = nil
+                }
+            }
+            
+            // 开始播放
+            let playResult = player.play()
+            if playResult {
+                isPlaying = true
+                currentPlayingFile = fileInfo
+                print("▶️ 开始播放: \(fileInfo.fileName)")
+                print("   文件路径: \(fileInfo.url.path)")
+                print("   文件大小: \(fileInfo.formattedFileSize)")
+                print("   持续时间: \(String(format: "%.2f", player.duration)) 秒")
+                print("   采样率: \(player.format.sampleRate) Hz")
+                print("   通道数: \(player.format.channelCount)")
+            } else {
+                saveErrorMessage = "播放启动失败，请检查音频会话设置"
+                showSaveErrorAlert = true
+                print("❌ 播放启动失败: \(fileInfo.fileName)")
+                print("   播放器状态: isPlaying=\(player.isPlaying), duration=\(player.duration)")
+            }
+        } catch {
+            saveErrorMessage = "播放失败: \(error.localizedDescription)\n错误类型: \(type(of: error))"
+            showSaveErrorAlert = true
+            print("❌ 播放错误: \(error)")
+            print("   文件: \(fileInfo.fileName)")
+            print("   路径: \(fileInfo.url.path)")
+            print("   错误详情: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   错误域: \(nsError.domain)")
+                print("   错误码: \(nsError.code)")
+            }
+        }
+    }
+    
+    /// 停止播放音频
+    private func stopAudio() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isPlaying = false
+        currentPlayingFile = nil
+    }
+    
+    /// 分享音频文件
+    private func shareAudioFile(fileInfo: AudioFileInfo) {
+        // 检查文件是否存在
+        guard FileManager.default.fileExists(atPath: fileInfo.url.path) else {
+            saveErrorMessage = "文件不存在，无法分享"
+            showSaveErrorAlert = true
+            return
+        }
+        
+        // 设置分享文件URL并显示分享面板
+        shareFileURL = fileInfo.url
+        showShareSheet = true
+        print("📤 准备分享文件: \(fileInfo.fileName)")
+    }
+    
+    /// 加载已保存的音频文件列表
+    private func loadSavedAudioFiles() {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let savedDirectory = documentsPath.appendingPathComponent("saved")
+        
+        guard FileManager.default.fileExists(atPath: savedDirectory.path) else {
+            return
+        }
+        
+        do {
+            let fileURLs = try FileManager.default.contentsOfDirectory(
+                at: savedDirectory,
+                includingPropertiesForKeys: [.fileSizeKey, .creationDateKey],
+                options: .skipsHiddenFiles
+            )
+            
+            let audioFiles = fileURLs
+                .filter { $0.pathExtension == "m4a" || $0.pathExtension == "aac" || $0.pathExtension == "wav" }
+                .compactMap { url -> AudioFileInfo? in
+                    do {
+                        let resourceValues = try url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey])
+                        let fileSize = resourceValues.fileSize ?? 0
+                        let createdAt = resourceValues.creationDate ?? Date()
+                        
+                        return AudioFileInfo(
+                            url: url,
+                            fileName: url.lastPathComponent,
+                            fileSize: Int64(fileSize),
+                            createdAt: createdAt,
+                            isComplete: true
+                        )
+                    } catch {
+                        return nil
+                    }
+                }
+                .sorted { $0.createdAt > $1.createdAt } // 按创建时间倒序排列
+            
+            savedAudioFiles = audioFiles
+        } catch {
+            print("加载音频文件列表失败: \(error)")
+        }
+    }
+    
+    /// 设置音频会话用于播放（仅在播放时调用，避免与录音冲突）
+    private func setupAudioSessionForPlayback() throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        let manager = DecibelMeterManager.shared
+        let isRecording = manager.isRecordingAudioFile()
+        
+        // 如果正在录音，使用 playAndRecord 模式以支持同时录音和播放
+        // 如果不在录音，使用 playback 模式（更简单，性能更好）
+        if isRecording {
+            print("⚠️ 正在录音中，使用 playAndRecord 模式以支持同时播放")
+            
+            // 检查当前类别，如果不是 playAndRecord，则切换
+            let currentCategory = audioSession.category
+            if currentCategory != .playAndRecord {
+                // 先设置类别（不需要先停用）
+                do {
+                    try audioSession.setCategory(
+                        .playAndRecord,
+                        mode: .default,
+                        options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+                    )
+                    print("✅ 已切换音频会话类别为 playAndRecord")
+                } catch {
+                    print("❌ 设置 playAndRecord 类别失败: \(error.localizedDescription)")
+                    // 不抛出错误，尝试继续
+                }
+            }
+        } else {
+            print("ℹ️ 不在录音，使用 playback 模式")
+            
+            // 检查当前类别，如果不是 playback，则切换
+            let currentCategory = audioSession.category
+            if currentCategory != .playback {
+                // 先设置类别（不需要先停用）
+                do {
+                    try audioSession.setCategory(
+                        .playback,
+                        mode: .default,
+                        options: [.mixWithOthers]
+                    )
+                    print("✅ 已切换音频会话类别为 playback")
+                } catch {
+                    print("❌ 设置 playback 类别失败: \(error.localizedDescription)")
+                    // 不抛出错误，尝试继续
+                }
+            }
+        }
+        
+        // 激活音频会话
+        // 如果会话已经在激活状态，setActive(true) 也是安全的，不会报错
+        do {
+            try audioSession.setActive(true, options: [])
+            print("✅ 音频会话已激活")
+        } catch {
+            // 如果激活失败，可能是因为会话已经在激活状态或无法激活
+            // 这在某些情况下是正常的，不一定是错误
+            print("⚠️ 激活音频会话时遇到问题（可能已经激活）: \(error.localizedDescription)")
+            // 不抛出错误，继续尝试播放
         }
     }
 }
@@ -892,6 +1240,181 @@ struct StatisticItemView: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+// MARK: - 音频文件信息结构
+
+struct AudioFileInfo: Identifiable {
+    let id = UUID()
+    let url: URL
+    let fileName: String
+    let fileSize: Int64
+    let createdAt: Date
+    let isComplete: Bool
+    
+    var formattedFileSize: String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: fileSize)
+    }
+    
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: createdAt)
+    }
+}
+
+// MARK: - 音频播放器观察器
+
+class AudioPlayerObserver: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    var onPlaybackFinished: (() -> Void)?
+    
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async {
+            self.onPlaybackFinished?()
+        }
+    }
+    
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        print("音频播放错误: \(error?.localizedDescription ?? "未知错误")")
+        DispatchQueue.main.async {
+            self.onPlaybackFinished?()
+        }
+    }
+}
+
+// MARK: - 音频录制和播放控制视图
+
+struct AudioRecordingControlView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    @Binding var savedAudioFiles: [AudioFileInfo]
+    @Binding var currentPlayingFile: AudioFileInfo?
+    @Binding var audioPlayer: AVAudioPlayer?
+    @Binding var isPlaying: Bool
+    @Binding var showSaveSuccessAlert: Bool
+    @Binding var showSaveErrorAlert: Bool
+    @Binding var saveErrorMessage: String
+    
+    let onSave: () -> Void
+    let onPlay: (AudioFileInfo) -> Void
+    let onStop: () -> Void
+    let onShare: (AudioFileInfo) -> Void
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 标题
+            Text("音频录制")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            // 保存按钮
+            Button(action: onSave) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("保存录音")
+                }
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(viewModel.isRecording ? Color.blue : Color.gray)
+                .cornerRadius(10)
+            }
+            .disabled(!viewModel.isRecording || !DecibelMeterManager.shared.isRecordingAudioFile())
+            
+            // 已保存的音频文件列表
+            if !savedAudioFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("已保存的录音")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    ForEach(savedAudioFiles) { fileInfo in
+                        AudioFileRowView(
+                            fileInfo: fileInfo,
+                            isPlaying: isPlaying && currentPlayingFile?.id == fileInfo.id,
+                            onPlay: { onPlay(fileInfo) },
+                            onStop: onStop,
+                            onShare: { onShare(fileInfo) }
+                        )
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(15)
+    }
+}
+
+// MARK: - 音频文件行视图
+
+struct AudioFileRowView: View {
+    let fileInfo: AudioFileInfo
+    let isPlaying: Bool
+    let onPlay: () -> Void
+    let onStop: () -> Void
+    let onShare: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // 播放/停止按钮
+            Button(action: {
+                if isPlaying {
+                    onStop()
+                } else {
+                    onPlay()
+                }
+            }) {
+                Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 32))
+                    .foregroundColor(isPlaying ? .red : .green)
+            }
+            
+            // 文件信息
+            VStack(alignment: .leading, spacing: 4) {
+                Text(fileInfo.fileName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 12) {
+                    Text(fileInfo.formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("•")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(fileInfo.formattedFileSize)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // 分享按钮
+            Button(action: onShare) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 20))
+                    .foregroundColor(.blue)
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.white)
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+
 
 #Preview {
     DecibelMeterView(viewModel: DecibelMeterViewModel())
