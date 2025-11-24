@@ -327,8 +327,11 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 性能优化属性
     
-    /// 上次UI更新时间（用于回调节流）
-    private var lastUIUpdateTime: Date = Date()
+    /// 上次分贝计UI更新时间（用于回调节流）
+    private var lastDecibelMeterUpdateTime: Date = Date()
+    
+    /// 上次噪音测量计UI更新时间（用于回调节流）
+    private var lastNoiseMeterUpdateTime: Date = Date()
     
     /// UI更新间隔（秒）- 降低更新频率以节省内存和CPU
     private let uiUpdateInterval: TimeInterval = 0.1  // 100ms更新一次，从21.5Hz降低到10Hz
@@ -374,8 +377,6 @@ class DecibelMeterManager: NSObject {
     /// 测量开始时间，用于计算测量时长
     private var measurementStartTime: Date?
     
-    // MARK: - 时间权重相关属性
-    
     /// 当前时间权重，默认为Fast（快响应）
     private var currentTimeWeighting: TimeWeighting = .fast
     
@@ -386,6 +387,10 @@ class DecibelMeterManager: NSObject {
     
     /// 标准工作日时长（小时），用于TWA计算
     private let standardWorkDay: Double = 8.0
+    
+    /// 持久化的声级累计时长字典 [声级: 累计时长(秒)]
+    /// 用于准确记录各声级的总暴露时间，不受历史记录清理影响
+    private var levelDurationsAccumulator: [Double: TimeInterval] = [:]
     
     // MARK: - 配置属性
     
@@ -404,6 +409,11 @@ class DecibelMeterManager: NSObject {
     
     /// 分贝值上限（dB），用于限制异常高值
     private let maxDecibelLimit: Double = 140.0
+    
+    /// 单个音频样本的时间间隔（秒）
+    /// 计算公式：bufferSize / sampleRate = 2048 / 44100 ≈ 0.0464秒
+    /// 用于准确计算累计暴露时间
+    private let sampleInterval: TimeInterval = 2048.0 / 44100.0
 
      // MARK: - 音频录制相关属性
     
@@ -1324,6 +1334,7 @@ class DecibelMeterManager: NSObject {
         historyQueue.sync {
             decibelMeterHistory.removeAll()
             noiseMeterHistory.removeAll()
+            levelDurationsAccumulator.removeAll()  // 清空累计时长累加器
         }
         currentMeasurement = nil
         currentStatistics = nil
@@ -1345,17 +1356,33 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 私有辅助方法
     
-    /// 检查是否应该更新UI（节流机制）
+    /// 检查是否应该更新分贝计UI（节流机制）
     ///
-    /// 用于控制UI更新频率，避免过于频繁的回调导致性能问题
+    /// 用于控制分贝计UI更新频率，避免过于频繁的回调导致性能问题
     ///
-    /// - Returns: 是否应该更新UI
-    private func shouldUpdateUI() -> Bool {
+    /// - Returns: 是否应该更新分贝计UI
+    private func shouldUpdateDecibelMeterUI() -> Bool {
         let now = Date()
-        let timeSinceLastUpdate = now.timeIntervalSince(lastUIUpdateTime)
+        let timeSinceLastUpdate = now.timeIntervalSince(lastDecibelMeterUpdateTime)
         
         if timeSinceLastUpdate >= uiUpdateInterval {
-            lastUIUpdateTime = now
+            lastDecibelMeterUpdateTime = now
+            return true
+        }
+        return false
+    }
+    
+    /// 检查是否应该更新噪音测量计UI（节流机制）
+    ///
+    /// 用于控制噪音测量计UI更新频率，避免过于频繁的回调导致性能问题
+    ///
+    /// - Returns: 是否应该更新噪音测量计UI
+    private func shouldUpdateNoiseMeterUI() -> Bool {
+        let now = Date()
+        let timeSinceLastUpdate = now.timeIntervalSince(lastNoiseMeterUpdateTime)
+        
+        if timeSinceLastUpdate >= uiUpdateInterval {
+            lastNoiseMeterUpdateTime = now
             return true
         }
         return false
@@ -1901,6 +1928,16 @@ class DecibelMeterManager: NSObject {
         let exchangeRate = useStandard.exchangeRate
         let ceilingLimit = 115.0  // 通用天花板限值
         
+        #if DEBUG
+        print("📊 ===== 允许暴露时长表计算开始 =====")
+        print("   - 标准: \(useStandard.rawValue)")
+        print("   - 基准限值: \(criterionLevel) dB")
+        print("   - 交换率: \(exchangeRate) dB")
+        print("   - 天花板限值: \(ceilingLimit) dB")
+        print("   - 采样间隔: \(String(format: "%.4f", sampleInterval)) 秒")
+        print("   - 累计记录条目数: \(levelDurationsAccumulator.count)")
+        #endif
+        
         // 生成声级列表（从基准限值开始，按交换率递增）
         var soundLevels: [Double] = []
         var currentLevel = criterionLevel
@@ -1909,30 +1946,70 @@ class DecibelMeterManager: NSObject {
             currentLevel += exchangeRate
         }
         
-        // 计算每个声级的累计暴露时间
-        // 使用字典存储每个声级范围的累计时间
-        var levelDurations: [Double: TimeInterval] = [:]
+        #if DEBUG
+        print("   - 声级列表: \(soundLevels.map { String(format: "%.0f", $0) }.joined(separator: ", ")) dB")
+        #endif
         
-        for measurement in noiseMeterHistory {
-            let level = measurement.calibratedDecibel
-            
-            // 找到小于或等于当前分贝值的最接近的限值
-            // 例如：87dB 归类到 85dB，92dB 归类到 91dB
-            var targetLevel: Double? = nil
-            
-            // 从高到低遍历声级列表，找到第一个小于或等于当前分贝值的限值
-            for i in stride(from: soundLevels.count - 1, through: 0, by: -1) {
-                if level >= soundLevels[i] {
-                    targetLevel = soundLevels[i]
-                    break
+        // ⭐ 使用持久化的累计时长累加器（不受历史记录清理影响）
+        // 从 levelDurationsAccumulator 中读取所有已记录的分贝值及其累计时间
+        // 然后根据声级列表归类到对应的声级区间
+        var levelDurations: [Double: TimeInterval] = [:]
+        var totalSamples = 0
+        var classifiedSamples = 0
+        var totalAccumulatedTime: TimeInterval = 0.0
+        
+        // 线程安全地访问累计时长累加器
+        historyQueue.sync {
+            // 遍历累计时长累加器中的每个分贝值
+            for (recordedLevel, duration) in levelDurationsAccumulator {
+                totalSamples += 1
+                totalAccumulatedTime += duration
+                
+                // 找到该分贝值所属的声级区间
+                // 例如：87dB 归类到 85dB，92dB 归类到 91dB
+                var targetLevel: Double? = nil
+                
+                // 从高到低遍历声级列表，找到第一个小于或等于当前分贝值的限值
+                for i in stride(from: soundLevels.count - 1, through: 0, by: -1) {
+                    if recordedLevel >= soundLevels[i] {
+                        targetLevel = soundLevels[i]
+                        break
+                    }
+                }
+                
+                // 如果找到了目标限值，累加时间
+                if let targetLevel = targetLevel {
+                    levelDurations[targetLevel, default: 0.0] += duration
+                    classifiedSamples += 1
                 }
             }
-            
-            // 如果找到了目标限值，累加时间
-            if let targetLevel = targetLevel {
-                levelDurations[targetLevel, default: 0.0] += 1.0
+        }
+        
+        #if DEBUG
+        let totalCalculatedTime = levelDurations.values.reduce(0, +)
+        let actualMeasurementTime = getMeasurementDuration()
+        print("\n   📈 时间累计统计:")
+        print("   - 累加器记录条目数: \(totalSamples)")
+        print("   - 已归类条目数: \(classifiedSamples)")
+        print("   - 未归类条目数: \(totalSamples - classifiedSamples) (低于基准限值)")
+        print("   - 累加器总时长: \(String(format: "%.1f", totalAccumulatedTime)) 秒")
+        print("   - 归类后累计时间: \(String(format: "%.1f", totalCalculatedTime)) 秒")
+        print("   - 实际测量时长: \(String(format: "%.1f", actualMeasurementTime)) 秒")
+        if actualMeasurementTime > 0 {
+            print("   - 时间匹配度: \(String(format: "%.1f", (totalCalculatedTime / actualMeasurementTime) * 100))%")
+        }
+        
+        // 显示各声级的分布
+        if !levelDurations.isEmpty {
+            print("\n   📊 声级分布:")
+            for soundLevel in soundLevels.sorted() {
+                if let duration = levelDurations[soundLevel], duration > 0 {
+                    let percentage = totalCalculatedTime > 0 ? (duration / totalCalculatedTime) * 100 : 0
+                    print("   - \(String(format: "%3.0f", soundLevel)) dB: \(String(format: "%6.1f", duration))秒 (\(String(format: "%5.1f", percentage))%)")
+                }
             }
         }
+        #endif
         
         // 生成表项
         let durations = soundLevels.map { soundLevel -> PermissibleExposureDuration in
@@ -1954,13 +2031,34 @@ class DecibelMeterManager: NSObject {
             )
         }
         
-        return PermissibleExposureDurationTable(
+        // 创建表格对象
+        let table = PermissibleExposureDurationTable(
             standard: useStandard,
             criterionLevel: criterionLevel,
             exchangeRate: exchangeRate,
             ceilingLimit: ceilingLimit,
             durations: durations
         )
+        
+        #if DEBUG
+        print("\n   🎯 允许暴露时长表结果:")
+        print("   - 表项数量: \(durations.count)")
+        print("   - 总剂量: \(String(format: "%.1f", table.totalDose))%")
+        print("   - 超标声级数: \(table.exceedingLevelsCount)")
+        
+        // 显示前5个有数据的表项
+        let nonZeroDurations = durations.filter { $0.accumulatedDuration > 0 }.prefix(5)
+        if !nonZeroDurations.isEmpty {
+            print("\n   📋 表项示例（前5个有数据的）:")
+            for duration in nonZeroDurations {
+                print("   - \(String(format: "%3.0f", duration.soundLevel)) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) = \(String(format: "%.1f", duration.currentLevelDose))%")
+            }
+        }
+         
+        print("📊 ===== 允许暴露时长表计算完成 =====\n")
+        #endif
+        
+        return table
     }
     
     // MARK: - 噪音测量计私有计算方法
@@ -2151,12 +2249,14 @@ class DecibelMeterManager: NSObject {
     func clearNoiseMeterHistory() {
         historyQueue.sync {
             noiseMeterHistory.removeAll()
+            levelDurationsAccumulator.removeAll()  // 同时清空累计时长
         }
     }
     
     /// 清除测量历史（兼容性方法，清除分贝计历史）
     func clearHistory() {
         clearDecibelMeterHistory()
+        clearNoiseMeterHistory()
     }
     
     /// 验证分贝值是否在合理范围内
@@ -2195,8 +2295,8 @@ class DecibelMeterManager: NSObject {
             peakDecibel = validatedRaw
         }
         
-        // 应用节流机制 - 只有在需要时才更新UI
-        guard shouldUpdateUI() else { return }
+        // 应用节流机制 - 只有在需要时才更新UI（使用独立的分贝计时间戳）
+        guard shouldUpdateDecibelMeterUI() else { return }
         
         // 计算当前LEQ值（基于分贝计历史）
         let currentLeq = getDecibelMeterRealTimeLeq()
@@ -2210,8 +2310,8 @@ class DecibelMeterManager: NSObject {
     
     /// 更新噪音测量计数据并通知回调
     private func updateNoiseMeterData(_ measurement: DecibelMeasurement) {
-        // 应用节流机制 - 只有在需要时才更新UI
-        guard shouldUpdateUI() else { return }
+        // 应用节流机制 - 只有在需要时才更新UI（使用独立的噪音测量计时间戳）
+        guard shouldUpdateNoiseMeterUI() else { return }
         
         // 计算当前LEQ值（基于噪音测量计历史）
         let currentLeq = getNoiseMeterRealTimeLeq()
@@ -2517,7 +2617,14 @@ class DecibelMeterManager: NSObject {
             decibelMeterHistory.append(decibelMeterMeasurement)
             noiseMeterHistory.append(noiseMeterMeasurement)
             
+            // ⭐ 实时更新累计时长累加器（用于允许暴露时长表）
+            // 将当前噪音测量值的分贝四舍五入到整数，累加采样间隔
+            let roundedLevel = round(noiseMeterMeasurement.calibratedDecibel)
+            levelDurationsAccumulator[roundedLevel, default: 0.0] += sampleInterval
+            
             // 优化历史记录长度管理 - 批量移除以提高性能
+            // ⚠️ 注意：移除历史记录不会影响累计时长累加器（levelDurationsAccumulator）
+            // 累计时长是持久化的，不受历史记录清理影响
             if decibelMeterHistory.count >= maxHistoryCount {
                 let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
                 decibelMeterHistory.removeFirst(removeCount)
@@ -2750,11 +2857,13 @@ class DecibelMeterManager: NSObject {
     ///
     /// - Parameters:
     ///   - destinationURL: 目标文件路径
+    ///   - isAll: 是否复制全部录音
     ///   - completion: 完成回调，返回复制结果和文件信息
     ///   - result: 复制结果（成功包含目标URL，失败包含错误）
     ///   - fileSize: 复制的文件大小（字节）
     ///   - isComplete: 是否完整（false表示录制还在进行中）
     func copyRecordingFile(to destinationURL: URL,
+                          isAll: Bool = true,
                           completion: @escaping (_ result: Result<URL, Error>, _ fileSize: Int64, _ isComplete: Bool) -> Void) {
         let tempURL = getTempRecordingURL()
         let fileManager = FileManager.default

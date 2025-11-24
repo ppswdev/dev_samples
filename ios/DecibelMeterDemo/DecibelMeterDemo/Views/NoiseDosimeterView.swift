@@ -105,6 +105,13 @@ struct NoiseDosimeterView: View {
                         Button("剂量详情") {
                             showingDoseDetailsSheet = true
                         }
+                        
+                        Divider()
+                        
+                        // 🧪 测试按钮
+                        Button("🧪 测试暴露表格") {
+                            testPermissibleExposureDurationTable()
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -120,6 +127,41 @@ struct NoiseDosimeterView: View {
         .sheet(isPresented: $showingStandardSelectionSheet) {
             StandardSelectionView(viewModel: viewModel)
         }
+    }
+    
+    // MARK: - 测试方法
+    
+    /// 测试允许暴露时长表数据
+    ///
+    /// 用于验证修复后的时间累计逻辑是否正确
+    private func testPermissibleExposureDurationTable() {
+        print("\n🧪 ==================== 手动测试触发 ====================")
+        print("📱 测试时间: \(Date())")
+        print("📊 当前测量状态: \(viewModel.isRecording ? "测量中" : "已停止")")
+        print("⏱️  测量时长: \(viewModel.getFormattedDuration())")
+        print("🧪 =======================================================\n")
+        
+        // 调用方法，触发详细日志输出
+        let table = viewModel.getPermissibleExposureDurationTable()
+        
+        print("\n✅ ==================== 测试完成 ====================")
+        print("📈 快速摘要:")
+        print("   - 总剂量: \(String(format: "%.1f", table.totalDose))%")
+        print("   - 表项数量: \(table.durations.count)")
+        print("   - 超标声级数: \(table.exceedingLevelsCount)")
+        
+        // 显示前3个有数据的表项
+        let nonZeroDurations = table.durations.filter { $0.accumulatedDuration > 0 }.prefix(3)
+        if !nonZeroDurations.isEmpty {
+            print("\n   前3个有数据的表项:")
+            for duration in nonZeroDurations {
+                print("   - \(String(format: "%.0f", duration.soundLevel)) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration)")
+            }
+        } else {
+            print("\n   ⚠️ 暂无数据（可能测量时长不够或声级低于基准限值）")
+        }
+        
+        print("✅ ===================================================\n")
     }
 }
 

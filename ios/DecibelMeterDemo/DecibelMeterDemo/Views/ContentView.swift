@@ -551,7 +551,7 @@ struct CalibrationView: View {
                         Text("精细调整")
                             .font(.headline)
                         
-                        Slider(value: $calibrationOffset, in: -20...20, step: 0.1)
+                        Slider(value: $calibrationOffset, in: -20...100, step: 0.1)
                             .accentColor(.blue)
                         
                         Text(String(format: "%.1f dB", calibrationOffset))

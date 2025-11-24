@@ -570,7 +570,7 @@ struct PermissibleExposureDuration: Codable, Identifiable {
     
     /// 当前声级剂量百分比（%）
     /// 计算公式：(累计时长 / 允许时长) × 100%
-    var currentLevelDose: Double {
+                                       var currentLevelDose: Double {
         guard allowedDuration > 0 else { return 0.0 }
         return (accumulatedDuration / allowedDuration) * 100.0
     }
