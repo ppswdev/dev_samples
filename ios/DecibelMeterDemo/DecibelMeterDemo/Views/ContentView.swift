@@ -221,6 +221,8 @@ struct StatusIndicatorView: View {
             return .green
         case .error:
             return .red
+        case .paused:
+            return .red
         }
     }
     
@@ -232,6 +234,8 @@ struct StatusIndicatorView: View {
             return "测量中"
         case .error(let message):
             return "错误: \(message)"
+        case .paused:
+            return "暂停"
         }
     }
     

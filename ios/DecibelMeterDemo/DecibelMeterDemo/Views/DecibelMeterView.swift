@@ -697,6 +697,8 @@ struct DecibelBasicDataView: View {
             return "测量中"
         case .error(_):
             return "错误"
+        case .paused:
+            return "暂停"
         }
     }
     
@@ -707,6 +709,8 @@ struct DecibelBasicDataView: View {
         case .measuring:
             return .green
         case .error:
+            return .red
+        case .paused:
             return .red
         }
     }

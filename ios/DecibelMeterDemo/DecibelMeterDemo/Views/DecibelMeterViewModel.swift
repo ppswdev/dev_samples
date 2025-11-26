@@ -303,6 +303,8 @@ class DecibelMeterViewModel: ObservableObject {
             return "测量中"
         case .error(let message):
             return "错误: \(message)"
+        case .paused:
+            return "暂停"
         }
     }
     

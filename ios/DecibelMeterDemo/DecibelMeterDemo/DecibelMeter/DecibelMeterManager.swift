@@ -26,7 +26,7 @@ import UIKit
 /// 测量状态（符合专业声级计标准）
 ///
 /// 根据 IEC 61672-1 标准，专业声级计通常只需要2-3个基本状态
-/// 本实现包含3个状态：停止、测量中、错误
+/// 本实现包含4个状态：停止、测量中、暂停、错误
 enum MeasurementState: Equatable {
     /// 停止状态：未进行测量，等待开始
     case idle
@@ -34,12 +34,15 @@ enum MeasurementState: Equatable {
     /// 测量状态：正在进行分贝测量和数据采集
     case measuring
     
+    /// 暂停状态：测量已暂停，数据记录停止，但保持历史记录
+    case paused
+    
     /// 错误状态：发生错误，包含错误描述信息
     case error(String)
     
     static func == (lhs: MeasurementState, rhs: MeasurementState) -> Bool {
         switch (lhs, rhs) {
-        case (.idle, .idle), (.measuring, .measuring):
+        case (.idle, .idle), (.measuring, .measuring), (.paused, .paused):
             return true
         case (.error(let lhsMessage), .error(let rhsMessage)):
             return lhsMessage == rhsMessage
@@ -55,6 +58,8 @@ enum MeasurementState: Equatable {
             return "idle"
         case .measuring:
             return "measuring"
+        case .paused:
+            return "paused"
         case .error(let message):
             return "error:\(message)"
         }
@@ -474,7 +479,14 @@ class DecibelMeterManager: NSObject {
     /// await manager.startMeasurement(enableRecording: true)
     /// ```
     func startMeasurement(enableRecording: Bool = true) async {
+        // 如果已经在测量中，直接返回
         guard measurementState != .measuring else { return }
+        
+        // 如果处于暂停状态，提示用户先恢复或停止
+        if measurementState == .paused {
+            print("⚠️ 测量已暂停，请先调用 resumeMeasurement() 恢复测量，或调用 stopMeasurement() 停止测量")
+            return
+        }
         
         do {
             try await requestMicrophonePermission()
@@ -513,6 +525,119 @@ class DecibelMeterManager: NSObject {
         }
     }
     
+    /// 暂停测量
+    ///
+    /// 暂停音频采集和分贝测量，但保持所有历史记录和状态
+    ///
+    /// **功能**：
+    /// - 暂停音频引擎（停止数据采集）
+    /// - 停止音频录制写入（但保留已录制的文件）
+    /// - 保持所有历史记录（分贝计、噪音测量计、累计时长累加器）
+    /// - 保持测量开始时间
+    /// - 更新状态为paused
+    ///
+    /// **注意**：
+    /// - 暂停期间不会记录新的测量数据
+    /// - 暂停期间可以继续查看历史数据
+    /// - 调用 `resumeMeasurement()` 可以恢复测量
+    ///
+    /// **使用示例**：
+    /// ```swift
+    /// manager.pauseMeasurement()
+    /// ```
+    ///
+    /// - Returns: 是否成功暂停（如果未在测量中则返回false）
+    @discardableResult
+    func pauseMeasurement() -> Bool {
+        guard measurementState == .measuring else {
+            print("⚠️ 无法暂停测量：当前状态为 \(measurementState.stringValue)，必须是 measuring 状态")
+            return false
+        }
+        
+        // 暂停音频引擎
+        audioEngine?.pause()
+        
+        // 注意：不停止音频录制文件，保持文件打开
+        // processAudioBuffer 不会被调用（因为引擎已暂停），所以不会写入新数据
+        // 恢复时引擎重启，processAudioBuffer 恢复调用，可以继续追加写入
+        
+        print("⏸️ 测量已暂停")
+        print("   - 音频引擎已暂停")
+        print("   - 历史记录保持: ✅")
+        print("   - 累计时长保持: ✅")
+        if isRecordingAudio {
+            print("   - 录音文件保持打开（暂停期间不写入，恢复后继续写入）: ✅")
+        }
+        
+        updateState(.paused)
+        isRecording = false  // 标记为不再记录新数据（但 isRecordingAudio 保持原值）
+        
+        return true
+    }
+    
+    /// 恢复测量
+    ///
+    /// 恢复音频采集和分贝测量，继续之前的数据记录
+    ///
+    /// **功能**：
+    /// - 重新启动音频引擎
+    /// - 恢复音频录制写入（如果之前有录制）
+    /// - 继续使用之前的历史记录和累计时长
+    /// - 更新状态为measuring
+    ///
+    /// **注意**：
+    /// - 恢复后会继续在原有历史记录基础上追加新数据
+    /// - 测量开始时间保持不变（从最初开始计算）
+    /// - 如果之前有录音，会继续追加到同一个文件
+    ///
+    /// **使用示例**：
+    /// ```swift
+    /// manager.resumeMeasurement()
+    /// ```
+    ///
+    /// - Returns: 是否成功恢复（如果未在暂停状态则返回false）
+    @discardableResult
+    func resumeMeasurement() -> Bool {
+        guard measurementState == .paused else {
+            print("⚠️ 无法恢复测量：当前状态为 \(measurementState.stringValue)，必须是 paused 状态")
+            return false
+        }
+        
+        do {
+            // 重新启动音频引擎
+            guard let audioEngine = audioEngine else {
+                print("❌ 无法恢复测量：音频引擎不存在")
+                updateState(.error("音频引擎不存在"))
+                return false
+            }
+            
+            try audioEngine.start()
+            
+            // 注意：如果之前有录音，音频文件仍然打开，processAudioBuffer 会自动继续写入
+            
+            // 重新开始后台任务
+            startBackgroundTask()
+            
+            print("▶️ 测量已恢复")
+            print("   - 音频引擎已重启")
+            print("   - 历史记录继续使用: ✅")
+            print("   - 累计时长继续累加: ✅")
+            if isRecordingAudio {
+                print("   - 录音文件继续写入: ✅")
+            }
+            
+            updateState(.measuring)
+            isRecording = true  // 标记为正在记录新数据
+            
+            return true
+        } catch {
+            let errorMessage = "恢复测量失败: \(error.localizedDescription)"
+            print("❌ \(errorMessage)")
+            updateState(.error(errorMessage))
+            return false
+        }
+    }
+    
     /// 停止测量
     ///
     /// 停止音频采集和分贝测量，计算最终统计信息
@@ -523,6 +648,10 @@ class DecibelMeterManager: NSObject {
     /// - 结束后台任务
     /// - 计算最终统计信息（如果有测量数据）
     /// - 更新状态为idle
+    ///
+    /// **注意**：
+    /// - 无论当前是 measuring 还是 paused 状态，都可以调用此方法停止测量
+    /// - 停止后会清除所有历史记录（如果调用 resetAllData）
     ///
     /// **使用示例**：
     /// ```swift
@@ -676,26 +805,42 @@ class DecibelMeterManager: NSObject {
     }
     
     /// 获取噪音测量计最大值（线程安全）
+    /// 
+    /// **注意**：返回的是已应用校准偏移的值
     func getNoiseMeterMax() -> Double {
         return historyQueue.sync {
             guard !noiseMeterHistory.isEmpty else { return -1.0 }
-            return noiseMeterHistory.map { $0.fastDecibel }.max() ?? -1.0
+            // ⭐ 修复：使用 calibratedDecibel（已包含校准偏移）而不是 fastDecibel
+            // 由于噪音测量计使用 fastDecibel，而 calibratedDecibel = fastDecibel + calibrationOffset
+            // 所以直接使用 calibratedDecibel 即可
+            return noiseMeterHistory.map { $0.calibratedDecibel }.max() ?? -1.0
         }
     }
     
     /// 获取噪音测量计最小值（线程安全）
+    ///
+    /// **注意**：返回的是已应用校准偏移的值
     func getNoiseMeterMin() -> Double {
         return historyQueue.sync {
             guard !noiseMeterHistory.isEmpty else { return -1.0 }
-            return noiseMeterHistory.map { $0.fastDecibel }.min() ?? -1.0
+            // ⭐ 修复：使用 calibratedDecibel（已包含校准偏移）而不是 fastDecibel
+            return noiseMeterHistory.map { $0.calibratedDecibel }.min() ?? -1.0
         }
     }
     
     /// 获取噪音测量计峰值（线程安全）
+    ///
+    /// **注意**：返回的是已应用校准偏移的值
+    /// **说明**：
+    /// - PEAK 是瞬时峰值，不应用时间权重，但需要应用校准偏移
+    /// - 由于历史记录中的 rawDecibel 未包含校准，需要加上当前的 calibrationOffset
+    /// - 如果校准值在测量过程中未改变，这样可以正确反映真实的瞬时峰值
     func getNoiseMeterPeak() -> Double {
         return historyQueue.sync {
             guard !noiseMeterHistory.isEmpty else { return -1.0 }
-            return noiseMeterHistory.map { $0.rawDecibel }.max() ?? -1.0
+            // ⭐ 修复：PEAK 应该使用 rawDecibel（瞬时峰值）+ 校准偏移
+            // 这样得到的是真实的瞬时峰值，已应用校准但未应用时间权重
+            return (noiseMeterHistory.map { $0.rawDecibel + calibrationOffset }.max() ?? -1.0)
         }
     }
     
@@ -2196,10 +2341,12 @@ class DecibelMeterManager: NSObject {
         
         // 基本统计
         let avgDecibel = decibelValues.reduce(0, +) / Double(decibelValues.count)
-        let minDecibel = decibelValues.min() ?? 0.0
-        // MAX使用实时追踪的时间权重最大值，不是历史数据的最大值
+        // ⭐ MIN、MAX、PEAK 使用实时追踪的值（已应用校准偏移）
+        // 这样可以确保统计值的一致性，并且反映真实的校准后测量值
+        let minDecibel = self.minDecibel >= 0 ? self.minDecibel : (decibelValues.min() ?? 0.0)
+        // MAX使用实时追踪的时间权重最大值（已应用校准）
         let maxDecibel = self.maxDecibel
-        // PEAK使用实时追踪的瞬时峰值，不是历史数据的最大值
+        // PEAK使用实时追踪的瞬时峰值（已应用校准）
         let peakDecibel = self.peakDecibel
         
         // 等效连续声级 (Leq)
@@ -2278,19 +2425,35 @@ class DecibelMeterManager: NSObject {
         let validatedDecibel = validateDecibelValue(measurement.calibratedDecibel)
         currentDecibel = validatedDecibel
         
-        // 更新MAX值（使用时间权重后的值）
-        let validatedTimeWeighted = validateDecibelValue(measurement.fastDecibel)
+        // ⭐ 修复：MAX 和 MIN 也应该应用校准偏移
+        // 根据当前时间权重选择对应的值，然后应用校准
+        let timeWeightedValue: Double
+        switch currentTimeWeighting {
+        case .fast:
+            timeWeightedValue = measurement.fastDecibel
+        case .slow:
+            timeWeightedValue = measurement.slowDecibel
+        case .impulse:
+            // 如果没有单独的 impulse 值，使用 fast 值作为近似
+            timeWeightedValue = measurement.fastDecibel
+        }
+        let calibratedTimeWeighted = timeWeightedValue + calibrationOffset
+        let validatedTimeWeighted = validateDecibelValue(calibratedTimeWeighted)
+        
+        // 更新MAX值（使用时间权重后的校准值）
         if maxDecibel < 0 || validatedTimeWeighted > maxDecibel {
             maxDecibel = validatedTimeWeighted
         }
         
-        // 更新MIN值（使用时间权重后的值）
+        // 更新MIN值（使用时间权重后的校准值）
         if minDecibel < 0 || validatedTimeWeighted < minDecibel {
             minDecibel = validatedTimeWeighted
         }
         
-        // 更新PEAK值（使用原始未加权的瞬时峰值）
-        let validatedRaw = validateDecibelValue(measurement.rawDecibel)
+        // ⭐ 修复：PEAK 也应该应用校准偏移
+        // PEAK 是瞬时峰值，不应用时间权重，但需要应用校准
+        let calibratedRaw = measurement.rawDecibel + calibrationOffset
+        let validatedRaw = validateDecibelValue(calibratedRaw)
         if peakDecibel < 0 || validatedRaw > peakDecibel {
             peakDecibel = validatedRaw
         }
