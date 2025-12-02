@@ -81,7 +81,7 @@ struct DecibelMeterView: View {
                             TimeHistoryChartView(viewModel: viewModel)
                             
                            // 频谱分析图 - 1/1和1/3倍频程
-                          //SpectrumAnalysisChartView(viewModel: viewModel)
+                           SpectrumAnalysisChartView(viewModel: viewModel)
                            
                            // 统计分布图 - L10、L50、L90
                            StatisticalDistributionChartView(viewModel: viewModel)
@@ -888,9 +888,12 @@ struct SpectrumAnalysisChartView: View {
             // Swift Charts 实现
             Chart {
                 ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
+                    // 使用 BarMark，明确指定 yStart 和 yEnd 来避免尺寸警告
+                    // 对于对数坐标轴，明确指定起点和终点可以让 Swift Charts 正确计算尺寸
                     BarMark(
                         x: .value("频率", dataPoint.frequency),
-                        y: .value("声压级", dataPoint.magnitude)
+                        yStart: .value("基线", 0),
+                        yEnd: .value("声压级", dataPoint.magnitude)
                     )
                     .foregroundStyle(.green)
                 }
@@ -899,7 +902,7 @@ struct SpectrumAnalysisChartView: View {
             .chartXScale(domain: 20...20000, type: .log) // 对数坐标轴，范围20Hz-20kHz
             .chartYScale(domain: 0...100) // 明确Y轴范围：0-100dB
             .chartXAxis {
-                AxisMarks(values: .stride(by: 1)) { value in
+                AxisMarks(values: getLogAxisValues()) { value in
                     AxisGridLine()
                     AxisTick()
                     if let freqValue = value.as(Double.self) {
@@ -977,6 +980,19 @@ struct SpectrumAnalysisChartView: View {
         } else {
             return "\(Int(frequency))"
         }
+    }
+    
+    /// 生成对数坐标轴的刻度值（适用于 20Hz-20kHz 范围）
+    private func getLogAxisValues() -> [Double] {
+        // 对数坐标轴的标准刻度值：20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k Hz
+        return [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    }
+    
+    /// 计算柱状图的相对宽度（基于倍频程类型）
+    private func getBarWidthRatio() -> CGFloat {
+        // 对于 1/1 倍频程（10个频点），使用较宽的柱子
+        // 对于 1/3 倍频程（30个频点），使用较窄的柱子
+        return selectedBandType == "1/1" ? 0.8 : 0.6
     }
 }
 

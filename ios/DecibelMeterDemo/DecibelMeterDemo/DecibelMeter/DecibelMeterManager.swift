@@ -269,6 +269,9 @@ class DecibelMeterManager: NSObject {
     
     // MARK: - 私有属性
     
+    /// 是否启用日志输出，默认为true
+    var enableLog: Bool = true
+    
     /// 当前测量结果，包含原始分贝、权重分贝、频谱等完整信息
     private var currentMeasurement: DecibelMeasurement?
     
@@ -484,9 +487,11 @@ class DecibelMeterManager: NSObject {
         
         // 如果处于暂停状态，提示用户先恢复或停止
         if measurementState == .paused {
-            print("⚠️ 测量已暂停，请先调用 resumeMeasurement() 恢复测量，或调用 stopMeasurement() 停止测量")
+            dmLog("⚠️ 测量已暂停，请先调用 resumeMeasurement() 恢复测量，或调用 stopMeasurement() 停止测量")
             return
         }
+        
+        dmLog("🚀 开始测量 - 状态: \(measurementState.stringValue)")
         
         do {
             try await requestMicrophonePermission()
@@ -498,7 +503,7 @@ class DecibelMeterManager: NSObject {
                 do {
                     try startAudioRecording()
                 } catch {
-                    print("❌ 启动音频录制失败: \(error)")
+                    dmLog("❌ 启动音频录制失败: \(error)")
                     // 即使录制失败，也继续测量（不强制要求录制）
                     // 如果录制是必需的，可以在这里抛出错误
                     // throw error
@@ -514,13 +519,20 @@ class DecibelMeterManager: NSObject {
             maxDecibel = -1.0   // 重置为未初始化状态
             minDecibel = -1.0   // 重置为未初始化状态，准备记录真实最小值
             
+            dmLog("✅ 测量初始化完成")
+            dmLog("   - 开始时间: \(measurementStartTime?.description ?? "N/A")")
+            dmLog("   - 录制状态: \(enableRecording ? "启用" : "禁用")")
+            
             updateState(.measuring)
             isRecording = true
             
+            dmLog("📊 测量已启动 - 状态: measuring")
+            
         } catch {
             let errorMessage = "启动测量失败: \(error.localizedDescription)"
-            print("❌ \(errorMessage)")
-            print("   错误类型: \(type(of: error))")
+            dmLog("❌ \(errorMessage)")
+            dmLog("   错误类型: \(type(of: error))")
+            dmLog("   错误详情: \(error)")
             updateState(.error(errorMessage))
         }
     }
@@ -549,8 +561,10 @@ class DecibelMeterManager: NSObject {
     /// - Returns: 是否成功暂停（如果未在测量中则返回false）
     @discardableResult
     func pauseMeasurement() -> Bool {
+        dmLog("⏸️ 请求暂停测量 - 当前状态: \(measurementState.stringValue)")
+        
         guard measurementState == .measuring else {
-            print("⚠️ 无法暂停测量：当前状态为 \(measurementState.stringValue)，必须是 measuring 状态")
+            dmLog("⚠️ 无法暂停测量：当前状态为 \(measurementState.stringValue)，必须是 measuring 状态")
             return false
         }
         
@@ -561,16 +575,18 @@ class DecibelMeterManager: NSObject {
         // processAudioBuffer 不会被调用（因为引擎已暂停），所以不会写入新数据
         // 恢复时引擎重启，processAudioBuffer 恢复调用，可以继续追加写入
         
-        print("⏸️ 测量已暂停")
-        print("   - 音频引擎已暂停")
-        print("   - 历史记录保持: ✅")
-        print("   - 累计时长保持: ✅")
+        dmLog("⏸️ 测量已暂停")
+        dmLog("   - 音频引擎已暂停")
+        dmLog("   - 历史记录保持: ✅")
+        dmLog("   - 累计时长保持: ✅")
         if isRecordingAudio {
-            print("   - 录音文件保持打开（暂停期间不写入，恢复后继续写入）: ✅")
+            dmLog("   - 录音文件保持打开（暂停期间不写入，恢复后继续写入）: ✅")
         }
         
         updateState(.paused)
         isRecording = false  // 标记为不再记录新数据（但 isRecordingAudio 保持原值）
+        
+        dmLog("📊 状态已更新: paused")
         
         return true
     }
@@ -598,19 +614,22 @@ class DecibelMeterManager: NSObject {
     /// - Returns: 是否成功恢复（如果未在暂停状态则返回false）
     @discardableResult
     func resumeMeasurement() -> Bool {
+        dmLog("▶️ 请求恢复测量 - 当前状态: \(measurementState.stringValue)")
+        
         guard measurementState == .paused else {
-            print("⚠️ 无法恢复测量：当前状态为 \(measurementState.stringValue)，必须是 paused 状态")
+            dmLog("⚠️ 无法恢复测量：当前状态为 \(measurementState.stringValue)，必须是 paused 状态")
             return false
         }
         
         do {
             // 重新启动音频引擎
             guard let audioEngine = audioEngine else {
-                print("❌ 无法恢复测量：音频引擎不存在")
+                dmLog("❌ 无法恢复测量：音频引擎不存在")
                 updateState(.error("音频引擎不存在"))
                 return false
             }
             
+            dmLog("🔄 正在重启音频引擎...")
             try audioEngine.start()
             
             // 注意：如果之前有录音，音频文件仍然打开，processAudioBuffer 会自动继续写入
@@ -618,21 +637,24 @@ class DecibelMeterManager: NSObject {
             // 重新开始后台任务
             startBackgroundTask()
             
-            print("▶️ 测量已恢复")
-            print("   - 音频引擎已重启")
-            print("   - 历史记录继续使用: ✅")
-            print("   - 累计时长继续累加: ✅")
+            dmLog("▶️ 测量已恢复")
+            dmLog("   - 音频引擎已重启")
+            dmLog("   - 历史记录继续使用: ✅")
+            dmLog("   - 累计时长继续累加: ✅")
             if isRecordingAudio {
-                print("   - 录音文件继续写入: ✅")
+                dmLog("   - 录音文件继续写入: ✅")
             }
             
             updateState(.measuring)
             isRecording = true  // 标记为正在记录新数据
             
+            dmLog("📊 状态已更新: measuring")
+            
             return true
         } catch {
             let errorMessage = "恢复测量失败: \(error.localizedDescription)"
-            print("❌ \(errorMessage)")
+            dmLog("❌ \(errorMessage)")
+            dmLog("   错误详情: \(error)")
             updateState(.error(errorMessage))
             return false
         }
@@ -658,11 +680,15 @@ class DecibelMeterManager: NSObject {
     /// manager.stopMeasurement()
     /// ```
     func stopMeasurement() {
+        dmLog("🛑 请求停止测量 - 当前状态: \(measurementState.stringValue)")
+        
         stopAudioEngine()
         
         // ⭐ 新增：停止音频录制并删除临时文件
+        // 使用同步删除，确保文件删除完成后再继续（避免重置后立即重新开始时文件冲突）
         if isRecordingAudio {
-            stopAudioRecording()
+            dmLog("📹 停止音频录制...")
+            stopAudioRecording(sync: true)
         }
         
         // 结束后台任务
@@ -673,11 +699,18 @@ class DecibelMeterManager: NSObject {
             return decibelMeterHistory
         }
         if !history.isEmpty {
+            dmLog("📊 计算最终统计信息 - 历史记录数: \(history.count)")
             currentStatistics = calculateStatistics(from: history)
         }
         
         updateState(.idle)
         isRecording = false
+        
+        dmLog("✅ 测量已停止 - 状态: idle")
+        if let startTime = measurementStartTime {
+            let duration = Date().timeIntervalSince(startTime)
+            dmLog("   - 测量时长: \(formatDuration(duration))")
+        }
     }
     
     /// 获取当前测量状态
@@ -717,7 +750,9 @@ class DecibelMeterManager: NSObject {
     
     /// 设置校准偏移
     func setCalibrationOffset(_ offset: Double) {
+        let oldOffset = calibrationOffset
         calibrationOffset = offset
+        dmLog("🔧 校准偏移变更: \(String(format: "%.2f", oldOffset)) dB -> \(String(format: "%.2f", offset)) dB")
     }
     
     /// 获取分贝计当前频率权重
@@ -763,7 +798,9 @@ class DecibelMeterManager: NSObject {
     
     /// 设置时间权重
     func setTimeWeighting(_ weighting: TimeWeighting) {
+        let oldWeighting = currentTimeWeighting
         currentTimeWeighting = weighting
+        dmLog("⏱️ 时间权重变更: \(oldWeighting.rawValue) -> \(weighting.rawValue)")
     }
     
     /// 获取所有可用的时间权重
@@ -1001,7 +1038,7 @@ class DecibelMeterManager: NSObject {
     /// ```swift
     /// let list = manager.getFrequencyWeightingsList()
     /// for option in list.options {
-    ///     print("\(option.displayName): \(option.description)")
+    ///     dmLog("\(option.displayName): \(option.description)")
     /// }
     /// ```
     func getFrequencyWeightingsList() -> WeightingOptionsList {
@@ -1041,7 +1078,7 @@ class DecibelMeterManager: NSObject {
     /// ```swift
     /// let list = manager.getTimeWeightingsList()
     /// for option in list.options {
-    ///     print("\(option.symbol): \(option.description)")
+    ///     dmLog("\(option.symbol): \(option.description)")
     /// }
     /// ```
     func getTimeWeightingsList() -> WeightingOptionsList {
@@ -1087,8 +1124,8 @@ class DecibelMeterManager: NSObject {
     /// ```swift
     /// // 获取最近60秒的数据
     /// let data = manager.getTimeHistoryChartData(timeRange: 60.0)
-    /// print("数据点数量: \(data.dataPoints.count)")
-    /// print("分贝范围: \(data.minDecibel) - \(data.maxDecibel) dB")
+    /// dmLog("数据点数量: \(data.dataPoints.count)")
+    /// dmLog("分贝范围: \(data.minDecibel) - \(data.maxDecibel) dB")
     /// ```
     func getTimeHistoryChartData(timeRange: TimeInterval = 60.0) -> TimeHistoryChartData {
         let now = Date()
@@ -1152,9 +1189,9 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let indicator = manager.getRealTimeIndicatorData()
-    /// print("当前: \(indicator.currentDecibel) \(indicator.weightingDisplay)")
-    /// print("LEQ: \(indicator.leq) dB")
-    /// print("MIN: \(indicator.min) dB, MAX: \(indicator.max) dB, PEAK: \(indicator.peak) dB")
+    /// dmLog("当前: \(indicator.currentDecibel) \(indicator.weightingDisplay)")
+    /// dmLog("LEQ: \(indicator.leq) dB")
+    /// dmLog("MIN: \(indicator.min) dB, MAX: \(indicator.max) dB, PEAK: \(indicator.peak) dB")
     /// ```
     func getRealTimeIndicatorData() -> RealTimeIndicatorData {
         return RealTimeIndicatorData(
@@ -1200,7 +1237,7 @@ class DecibelMeterManager: NSObject {
     ///
     /// // 1/3倍频程
     /// let spectrum1_3 = manager.getSpectrumChartData(bandType: "1/3")
-    /// print("频率点数量: \(spectrum1_3.dataPoints.count)")
+    /// dmLog("频率点数量: \(spectrum1_3.dataPoints.count)")
     /// ```
     func getSpectrumChartData(bandType: String = "1/3") -> SpectrumChartData {
         let frequencies: [Double]
@@ -1271,9 +1308,9 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let distribution = manager.getStatisticalDistributionChartData()
-    /// print("L10: \(distribution.l10) dB") // 噪声峰值
-    /// print("L50: \(distribution.l50) dB") // 中位数
-    /// print("L90: \(distribution.l90) dB") // 背景噪声
+    /// dmLog("L10: \(distribution.l10) dB") // 噪声峰值
+    /// dmLog("L50: \(distribution.l50) dB") // 中位数
+    /// dmLog("L90: \(distribution.l90) dB") // 背景噪声
     /// ```
     func getStatisticalDistributionChartData() -> StatisticalDistributionChartData {
         // 线程安全地获取历史记录的副本
@@ -1362,11 +1399,11 @@ class DecibelMeterManager: NSObject {
     /// ```swift
     /// // 每10秒采样一次
     /// let leqTrend = manager.getLEQTrendChartData(interval: 10.0)
-    /// print("当前LEQ: \(leqTrend.currentLeq) dB")
-    /// print("数据点数量: \(leqTrend.dataPoints.count)")
+    /// dmLog("当前LEQ: \(leqTrend.currentLeq) dB")
+    /// dmLog("数据点数量: \(leqTrend.dataPoints.count)")
     ///
     /// for point in leqTrend.dataPoints {
-    ///     print("时段LEQ: \(point.leq) dB, 累积LEQ: \(point.cumulativeLeq) dB")
+    ///     dmLog("时段LEQ: \(point.leq) dB, 累积LEQ: \(point.cumulativeLeq) dB")
     /// }
     /// ```
     func getLEQTrendChartData(interval: TimeInterval = 10.0) -> LEQTrendChartData {
@@ -1466,21 +1503,33 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// manager.resetAllData()
-    /// print("状态: \(manager.getCurrentState())") // idle
-    /// print("分贝值: \(manager.getCurrentDecibel())") // 0.0
+    /// dmLog("状态: \(manager.getCurrentState())") // idle
+    /// dmLog("分贝值: \(manager.getCurrentDecibel())") // 0.0
     /// ```
     func resetAllData() {
+        dmLog("🔄 重置所有数据 - 当前状态: \(measurementState.stringValue)")
+        
         // 停止测量
         if measurementState == .measuring {
             stopMeasurement()
         }
         
         // 清除所有数据（线程安全）
-        historyQueue.sync {
+        let (decibelCount, noiseCount, accumulatorCount) = historyQueue.sync {
+            let decibelCount = decibelMeterHistory.count
+            let noiseCount = noiseMeterHistory.count
+            let accumulatorCount = levelDurationsAccumulator.count
+            
             decibelMeterHistory.removeAll()
             noiseMeterHistory.removeAll()
             levelDurationsAccumulator.removeAll()  // 清空累计时长累加器
+            
+            return (decibelCount, noiseCount, accumulatorCount)
         }
+        
+        dmLog("   - 清除分贝计历史: \(decibelCount) 条")
+        dmLog("   - 清除噪音计历史: \(noiseCount) 条")
+        dmLog("   - 清除累计时长记录: \(accumulatorCount) 条")
         currentMeasurement = nil
         currentStatistics = nil
         measurementStartTime = nil
@@ -1497,6 +1546,8 @@ class DecibelMeterManager: NSObject {
         // 重置状态
         updateState(.idle)
         isRecording = false
+        
+        dmLog("✅ 数据重置完成")
     }
     
     // MARK: - 私有辅助方法
@@ -1558,11 +1609,11 @@ class DecibelMeterManager: NSObject {
         if kerr == KERN_SUCCESS {
             let usedMemoryMB = Double(info.resident_size) / 1024.0 / 1024.0
             
-            print("📊 内存使用: \(String(format: "%.1f", usedMemoryMB)) MB")
+            dmLog("📊 内存使用: \(String(format: "%.1f", usedMemoryMB)) MB")
             
             // 内存使用超过阈值时执行清理
             if usedMemoryMB > 100.0 {  // 超过100MB
-                print("⚠️ 内存使用过高，执行清理操作")
+                dmLog("⚠️ 内存使用过高，执行清理操作")
                 performMemoryCleanup()
             }
         }
@@ -1581,18 +1632,18 @@ class DecibelMeterManager: NSObject {
             if decibelMeterHistory.count > maxHistoryCount / 2 {
                 let removeCount = decibelMeterHistory.count / 2
                 decibelMeterHistory.removeFirst(removeCount)
-                print("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
+                dmLog("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
             }
             
             if noiseMeterHistory.count > maxHistoryCount / 2 {
                 let removeCount = noiseMeterHistory.count / 2
                 noiseMeterHistory.removeFirst(removeCount)
-                print("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
+                dmLog("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
             }
         }
         
         // 强制垃圾回收
-        print("🧹 执行内存清理完成")
+        dmLog("🧹 执行内存清理完成")
     }
     
     /// 格式化时间间隔为 HH:mm:ss 格式
@@ -1653,9 +1704,9 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let doseData = manager.getNoiseDoseData(standard: .osha)
-    /// print("剂量: \(doseData.dosePercentage)%")
-    /// print("TWA: \(doseData.twa) dB")
-    /// print("风险等级: \(doseData.riskLevel)")
+    /// dmLog("剂量: \(doseData.dosePercentage)%")
+    /// dmLog("TWA: \(doseData.twa) dB")
+    /// dmLog("风险等级: \(doseData.riskLevel)")
     /// ```
     func getNoiseDoseData(standard: NoiseStandard? = nil) -> NoiseDoseData {
         let useStandard = standard ?? currentNoiseStandard
@@ -1710,7 +1761,7 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// if manager.isExceedingLimit(standard: .osha) {
-    ///     print("警告：已超过OSHA限值！")
+    ///     dmLog("警告：已超过OSHA限值！")
     /// }
     /// ```
     func isExceedingLimit(standard: NoiseStandard) -> Bool {
@@ -1728,8 +1779,8 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let result = manager.getLimitComparisonResult(standard: .niosh)
-    /// print("TWA: \(result.currentTWA) dB, 限值: \(result.twaLimit) dB")
-    /// print("余量: \(result.limitMargin) dB")
+    /// dmLog("TWA: \(result.currentTWA) dB, 限值: \(result.twaLimit) dB")
+    /// dmLog("余量: \(result.limitMargin) dB")
     /// ```
     func getLimitComparisonResult(standard: NoiseStandard) -> LimitComparisonResult {
         let doseData = getNoiseDoseData(standard: standard)
@@ -1784,7 +1835,7 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let data = manager.getDoseAccumulationChartData(interval: 60.0, standard: .osha)
-    /// print("当前剂量: \(data.currentDose)%")
+    /// dmLog("当前剂量: \(data.currentDose)%")
     /// ```
     func getDoseAccumulationChartData(interval: TimeInterval = 60.0, standard: NoiseStandard? = nil) -> DoseAccumulationChartData {
         let useStandard = standard ?? currentNoiseStandard
@@ -1883,7 +1934,7 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let data = manager.getTWATrendChartData(interval: 60.0, standard: .niosh)
-    /// print("当前TWA: \(data.currentTWA) dB")
+    /// dmLog("当前TWA: \(data.currentTWA) dB")
     /// ```
     func getTWATrendChartData(interval: TimeInterval = 60.0, standard: NoiseStandard? = nil) -> TWATrendChartData {
         let useStandard = standard ?? currentNoiseStandard
@@ -1976,7 +2027,11 @@ class DecibelMeterManager: NSObject {
     /// manager.setNoiseStandard(.osha)
     /// ```
     func setNoiseStandard(_ standard: NoiseStandard) {
+        let oldStandard = currentNoiseStandard
         currentNoiseStandard = standard
+        dmLog("📋 噪声标准变更: \(oldStandard.rawValue) -> \(standard.rawValue)")
+        dmLog("   - TWA限值: \(standard.twaLimit) dB")
+        dmLog("   - 交换率: \(standard.exchangeRate) dB")
     }
     
     /// 获取当前噪声限值标准
@@ -2061,10 +2116,10 @@ class DecibelMeterManager: NSObject {
     /// **使用示例**：
     /// ```swift
     /// let table = manager.getPermissibleExposureDurationTable(standard: .niosh)
-    /// print("总剂量: \(table.totalDose)%")
-    /// print("超标声级数: \(table.exceedingLevelsCount)")
+    /// dmLog("总剂量: \(table.totalDose)%")
+    /// dmLog("超标声级数: \(table.exceedingLevelsCount)")
     /// for duration in table.durations {
-    ///     print("\(duration.soundLevel) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) (\(String(format: "%.1f", duration.currentLevelDose))%)")
+    ///     dmLog("\(duration.soundLevel) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) (\(String(format: "%.1f", duration.currentLevelDose))%)")
     /// }
     /// ```
     func getPermissibleExposureDurationTable(standard: NoiseStandard? = nil) -> PermissibleExposureDurationTable {
@@ -2073,15 +2128,15 @@ class DecibelMeterManager: NSObject {
         let exchangeRate = useStandard.exchangeRate
         let ceilingLimit = 115.0  // 通用天花板限值
         
-        #if DEBUG
-        print("📊 ===== 允许暴露时长表计算开始 =====")
-        print("   - 标准: \(useStandard.rawValue)")
-        print("   - 基准限值: \(criterionLevel) dB")
-        print("   - 交换率: \(exchangeRate) dB")
-        print("   - 天花板限值: \(ceilingLimit) dB")
-        print("   - 采样间隔: \(String(format: "%.4f", sampleInterval)) 秒")
-        print("   - 累计记录条目数: \(levelDurationsAccumulator.count)")
-        #endif
+//        #if DEBUG
+//        dmLog("📊 ===== 允许暴露时长表计算开始 =====")
+//        dmLog("   - 标准: \(useStandard.rawValue)")
+//        dmLog("   - 基准限值: \(criterionLevel) dB")
+//        dmLog("   - 交换率: \(exchangeRate) dB")
+//        dmLog("   - 天花板限值: \(ceilingLimit) dB")
+//        dmLog("   - 采样间隔: \(String(format: "%.4f", sampleInterval)) 秒")
+//        dmLog("   - 累计记录条目数: \(levelDurationsAccumulator.count)")
+//        #endif
         
         // 生成声级列表（从基准限值开始，按交换率递增）
         var soundLevels: [Double] = []
@@ -2091,9 +2146,9 @@ class DecibelMeterManager: NSObject {
             currentLevel += exchangeRate
         }
         
-        #if DEBUG
-        print("   - 声级列表: \(soundLevels.map { String(format: "%.0f", $0) }.joined(separator: ", ")) dB")
-        #endif
+//        #if DEBUG
+//        dmLog("   - 声级列表: \(soundLevels.map { String(format: "%.0f", $0) }.joined(separator: ", ")) dB")
+//        #endif
         
         // ⭐ 使用持久化的累计时长累加器（不受历史记录清理影响）
         // 从 levelDurationsAccumulator 中读取所有已记录的分贝值及其累计时间
@@ -2130,31 +2185,31 @@ class DecibelMeterManager: NSObject {
             }
         }
         
-        #if DEBUG
-        let totalCalculatedTime = levelDurations.values.reduce(0, +)
-        let actualMeasurementTime = getMeasurementDuration()
-        print("\n   📈 时间累计统计:")
-        print("   - 累加器记录条目数: \(totalSamples)")
-        print("   - 已归类条目数: \(classifiedSamples)")
-        print("   - 未归类条目数: \(totalSamples - classifiedSamples) (低于基准限值)")
-        print("   - 累加器总时长: \(String(format: "%.1f", totalAccumulatedTime)) 秒")
-        print("   - 归类后累计时间: \(String(format: "%.1f", totalCalculatedTime)) 秒")
-        print("   - 实际测量时长: \(String(format: "%.1f", actualMeasurementTime)) 秒")
-        if actualMeasurementTime > 0 {
-            print("   - 时间匹配度: \(String(format: "%.1f", (totalCalculatedTime / actualMeasurementTime) * 100))%")
-        }
-        
-        // 显示各声级的分布
-        if !levelDurations.isEmpty {
-            print("\n   📊 声级分布:")
-            for soundLevel in soundLevels.sorted() {
-                if let duration = levelDurations[soundLevel], duration > 0 {
-                    let percentage = totalCalculatedTime > 0 ? (duration / totalCalculatedTime) * 100 : 0
-                    print("   - \(String(format: "%3.0f", soundLevel)) dB: \(String(format: "%6.1f", duration))秒 (\(String(format: "%5.1f", percentage))%)")
-                }
-            }
-        }
-        #endif
+//        #if DEBUG
+//        let totalCalculatedTime = levelDurations.values.reduce(0, +)
+//        let actualMeasurementTime = getMeasurementDuration()
+//        dmLog("\n   📈 时间累计统计:")
+//        dmLog("   - 累加器记录条目数: \(totalSamples)")
+//        dmLog("   - 已归类条目数: \(classifiedSamples)")
+//        dmLog("   - 未归类条目数: \(totalSamples - classifiedSamples) (低于基准限值)")
+//        dmLog("   - 累加器总时长: \(String(format: "%.1f", totalAccumulatedTime)) 秒")
+//        dmLog("   - 归类后累计时间: \(String(format: "%.1f", totalCalculatedTime)) 秒")
+//        dmLog("   - 实际测量时长: \(String(format: "%.1f", actualMeasurementTime)) 秒")
+//        if actualMeasurementTime > 0 {
+//            dmLog("   - 时间匹配度: \(String(format: "%.1f", (totalCalculatedTime / actualMeasurementTime) * 100))%")
+//        }
+//        
+//        // 显示各声级的分布
+//        if !levelDurations.isEmpty {
+//            dmLog("\n   📊 声级分布:")
+//            for soundLevel in soundLevels.sorted() {
+//                if let duration = levelDurations[soundLevel], duration > 0 {
+//                    let percentage = totalCalculatedTime > 0 ? (duration / totalCalculatedTime) * 100 : 0
+//                    dmLog("   - \(String(format: "%3.0f", soundLevel)) dB: \(String(format: "%6.1f", duration))秒 (\(String(format: "%5.1f", percentage))%)")
+//                }
+//            }
+//        }
+//        #endif
         
         // 生成表项
         let durations = soundLevels.map { soundLevel -> PermissibleExposureDuration in
@@ -2185,23 +2240,23 @@ class DecibelMeterManager: NSObject {
             durations: durations
         )
         
-        #if DEBUG
-        print("\n   🎯 允许暴露时长表结果:")
-        print("   - 表项数量: \(durations.count)")
-        print("   - 总剂量: \(String(format: "%.1f", table.totalDose))%")
-        print("   - 超标声级数: \(table.exceedingLevelsCount)")
-        
-        // 显示前5个有数据的表项
-        let nonZeroDurations = durations.filter { $0.accumulatedDuration > 0 }.prefix(5)
-        if !nonZeroDurations.isEmpty {
-            print("\n   📋 表项示例（前5个有数据的）:")
-            for duration in nonZeroDurations {
-                print("   - \(String(format: "%3.0f", duration.soundLevel)) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) = \(String(format: "%.1f", duration.currentLevelDose))%")
-            }
-        }
-         
-        print("📊 ===== 允许暴露时长表计算完成 =====\n")
-        #endif
+//        #if DEBUG
+//        dmLog("\n   🎯 允许暴露时长表结果:")
+//        dmLog("   - 表项数量: \(durations.count)")
+//        dmLog("   - 总剂量: \(String(format: "%.1f", table.totalDose))%")
+//        dmLog("   - 超标声级数: \(table.exceedingLevelsCount)")
+//        
+//        // 显示前5个有数据的表项
+//        let nonZeroDurations = durations.filter { $0.accumulatedDuration > 0 }.prefix(5)
+//        if !nonZeroDurations.isEmpty {
+//            dmLog("\n   📋 表项示例（前5个有数据的）:")
+//            for duration in nonZeroDurations {
+//                dmLog("   - \(String(format: "%3.0f", duration.soundLevel)) dB: \(duration.formattedAccumulatedDuration) / \(duration.formattedAllowedDuration) = \(String(format: "%.1f", duration.currentLevelDose))%")
+//            }
+//        }
+//         
+//        dmLog("📊 ===== 允许暴露时长表计算完成 =====\n")
+//        #endif
         
         return table
     }
@@ -2230,12 +2285,12 @@ class DecibelMeterManager: NSObject {
         let exposureHours = duration / 3600.0  // 转换为小时
         
         // 调试输出
-        #if DEBUG
-        print("🔍 TWA计算调试:")
-        print("   - LEQ: \(String(format: "%.1f", leq)) dB")
-        print("   - 测量时长: \(String(format: "%.2f", exposureHours)) 小时")
-        print("   - 标准工作日: \(standardWorkDay) 小时")
-        #endif
+//        #if DEBUG
+//        dmLog("🔍 TWA计算调试:")
+//        dmLog("   - LEQ: \(String(format: "%.1f", leq)) dB")
+//        dmLog("   - 测量时长: \(String(format: "%.2f", exposureHours)) 小时")
+//        dmLog("   - 标准工作日: \(standardWorkDay) 小时")
+//        #endif
         
         let twa: Double
         if exposureHours <= standardWorkDay {
@@ -2248,10 +2303,10 @@ class DecibelMeterManager: NSObject {
         }
         
         // 调试输出
-        #if DEBUG
-        print("   - 最终TWA: \(String(format: "%.1f", twa)) dB")
-        print("----------------------------------------")
-        #endif
+//        #if DEBUG
+//        dmLog("   - 最终TWA: \(String(format: "%.1f", twa)) dB")
+//        dmLog("----------------------------------------")
+//        #endif
         
         return twa
     }
@@ -2382,9 +2437,12 @@ class DecibelMeterManager: NSObject {
     
     /// 清除分贝计测量历史（线程安全）
     func clearDecibelMeterHistory() {
-        historyQueue.sync {
+        let count = historyQueue.sync {
+            let count = decibelMeterHistory.count
             decibelMeterHistory.removeAll()
+            return count
         }
+        dmLog("🗑️ 清除分贝计历史: \(count) 条记录")
         maxDecibel = -1.0
         minDecibel = -1.0   // 重置为未初始化状态
         peakDecibel = -1.0
@@ -2394,16 +2452,22 @@ class DecibelMeterManager: NSObject {
     
     /// 清除噪音测量计测量历史（线程安全）
     func clearNoiseMeterHistory() {
-        historyQueue.sync {
+        let (noiseCount, accumulatorCount) = historyQueue.sync {
+            let noiseCount = noiseMeterHistory.count
+            let accumulatorCount = levelDurationsAccumulator.count
             noiseMeterHistory.removeAll()
             levelDurationsAccumulator.removeAll()  // 同时清空累计时长
+            return (noiseCount, accumulatorCount)
         }
+        dmLog("🗑️ 清除噪音计历史: \(noiseCount) 条记录, \(accumulatorCount) 条累计时长")
     }
     
     /// 清除测量历史（兼容性方法，清除分贝计历史）
     func clearHistory() {
+        dmLog("🗑️ 清除所有测量历史...")
         clearDecibelMeterHistory()
         clearNoiseMeterHistory()
+        dmLog("✅ 历史记录已清除")
     }
     
     /// 验证分贝值是否在合理范围内
@@ -2413,7 +2477,9 @@ class DecibelMeterManager: NSObject {
     
     /// 更新状态并通知回调
     private func updateState(_ newState: MeasurementState) {
+        let oldState = measurementState
         measurementState = newState
+        dmLog("🔄 状态变更: \(oldState.stringValue) -> \(newState.stringValue)")
         DispatchQueue.main.async { [weak self] in
             self?.onStateChange?(newState)
         }
@@ -2464,7 +2530,7 @@ class DecibelMeterManager: NSObject {
         // 计算当前LEQ值（基于分贝计历史）
         let currentLeq = getDecibelMeterRealTimeLeq()
         
-        //print("updateDecibelMeterData currentDecibel: \(currentDecibel), maxDecibel: \(maxDecibel), minDecibel: \(minDecibel), peakDecibel: \(peakDecibel), leq: \(currentLeq)")
+        //dmLog("updateDecibelMeterData currentDecibel: \(currentDecibel), maxDecibel: \(maxDecibel), minDecibel: \(minDecibel), peakDecibel: \(peakDecibel), leq: \(currentLeq)")
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.onDecibelMeterDataUpdate?(self.currentDecibel, self.peakDecibel, self.maxDecibel, self.minDecibel, currentLeq)
@@ -2484,7 +2550,7 @@ class DecibelMeterManager: NSObject {
         let noiseMin = getNoiseMeterMin()
         let noisePeak = getNoiseMeterPeak()
         
-        //print("updateNoiseMeterData currentDecibel: \(measurement.calibratedDecibel), maxDecibel: \(noiseMax), minDecibel: \(noiseMin), peakDecibel: \(noisePeak), leq: \(currentLeq)")
+        //dmLog("updateNoiseMeterData currentDecibel: \(measurement.calibratedDecibel), maxDecibel: \(noiseMax), minDecibel: \(noiseMin), peakDecibel: \(noisePeak), leq: \(currentLeq)")
         DispatchQueue.main.async { [weak self] in
             self?.onNoiseMeterDataUpdate?(measurement.calibratedDecibel, noisePeak, noiseMax, noiseMin, currentLeq)
         }
@@ -2549,6 +2615,26 @@ class DecibelMeterManager: NSObject {
         return sqrt(variance)
     }
     
+    // MARK: - 日志方法
+    
+    /// 统一的日志输出方法
+    ///
+    /// - Parameter message: 日志消息
+    private func dmLog(_ message: String) {
+        guard enableLog else { return }
+        print(message)
+    }
+    
+    /// 统一的日志输出方法（带格式化）
+    ///
+    /// - Parameters:
+    ///   - format: 格式化字符串
+    ///   - arguments: 参数列表
+    private func dmLog(_ format: String, _ arguments: CVarArg...) {
+        guard enableLog else { return }
+        print(String(format: format, arguments: arguments))
+    }
+    
     // MARK: - 私有方法
     
     /// 设置音频会话
@@ -2572,9 +2658,11 @@ class DecibelMeterManager: NSObject {
     /// - 移除 `.mixWithOthers`，使用 `.defaultToSpeaker` 确保音量
     /// - 设置输入增益为 0（避免过度增益导致播放音量降低）
     private func setupAudioSession() {
+        dmLog("🎵 设置音频会话...")
         do {
             // 首先停用当前音频会话（如果已激活）
             if audioSession.isOtherAudioPlaying || audioSession.category != .playAndRecord {
+                dmLog("   - 停用当前音频会话")
                 try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
             }
             
@@ -2600,9 +2688,9 @@ class DecibelMeterManager: NSObject {
             if audioSession.isInputGainSettable {
                 do {
                     try audioSession.setInputGain(0.3) // 降低输入增益，提升播放音量
-                    print("🔊 已设置输入增益为 0.3（优化播放音量）")
+                    dmLog("🔊 已设置输入增益为 0.3（优化播放音量）")
                 } catch {
-                    print("⚠️ 设置输入增益失败: \(error.localizedDescription)")
+                    dmLog("⚠️ 设置输入增益失败: \(error.localizedDescription)")
                 }
             }
             
@@ -2612,19 +2700,19 @@ class DecibelMeterManager: NSObject {
             // 🔊 强制使用扬声器输出（确保最大音量）
             try audioSession.overrideOutputAudioPort(.speaker)
             
-            print("✅ 音频会话配置成功（音量优化模式）")
-            print("   - Category: \(audioSession.category.rawValue)")
-            print("   - Mode: \(audioSession.mode.rawValue) 🔊")
-            print("   - 持续采集: ✅（播放时不中断）")
-            print("   - 播放声音被测量: ✅")
-            print("   - 音频输出: 扬声器（优化音量）🔊")
-            print("   - Input Gain: \(audioSession.inputGain)")
-            print("   - Output Route: \(audioSession.currentRoute.outputs.first?.portType.rawValue ?? "unknown")")
-            print("   - Output Volume: \(audioSession.outputVolume)")
+            dmLog("✅ 音频会话配置成功（音量优化模式）")
+            dmLog("   - Category: \(audioSession.category.rawValue)")
+            dmLog("   - Mode: \(audioSession.mode.rawValue) 🔊")
+            dmLog("   - 持续采集: ✅（播放时不中断）")
+            dmLog("   - 播放声音被测量: ✅")
+            dmLog("   - 音频输出: 扬声器（优化音量）🔊")
+            dmLog("   - Input Gain: \(audioSession.inputGain)")
+            dmLog("   - Output Route: \(audioSession.currentRoute.outputs.first?.portType.rawValue ?? "unknown")")
+            dmLog("   - Output Volume: \(audioSession.outputVolume)")
             
         } catch {
-            print("❌ 设置音频会话失败: \(error.localizedDescription)")
-            print("   错误详情: \(error)")
+            dmLog("❌ 设置音频会话失败: \(error.localizedDescription)")
+            dmLog("   错误详情: \(error)")
             updateState(.error("音频会话配置失败: \(error.localizedDescription)"))
         }
     }
@@ -2639,30 +2727,30 @@ class DecibelMeterManager: NSObject {
         // 打印后台配置信息
         appLifecycleManager.printBackgroundConfiguration()
         
-        print("开始后台测量任务，ID: \(backgroundTaskID.rawValue)")
+        dmLog("开始后台测量任务，ID: \(backgroundTaskID.rawValue)")
     }
     
     /// 延长后台任务
     private func extendBackgroundTask() {
         guard backgroundTaskID != .invalid else { return }
         
-        print("尝试延长后台任务")
+        dmLog("尝试延长后台任务")
         
         // 使用AppLifecycleManager延长任务
         let newTaskID = appLifecycleManager.startBackgroundTaskForMeasurement()
         
         if newTaskID != .invalid {
             backgroundTaskID = newTaskID
-            print("成功延长后台任务，新ID: \(newTaskID.rawValue)")
+            dmLog("成功延长后台任务，新ID: \(newTaskID.rawValue)")
         } else {
-            print("无法延长后台任务")
+            dmLog("无法延长后台任务")
         }
     }
     
     /// 结束后台任务
     private func endBackgroundTask() {
         if backgroundTaskID != .invalid {
-            print("结束后台测量任务，ID: \(backgroundTaskID.rawValue)")
+            dmLog("结束后台测量任务，ID: \(backgroundTaskID.rawValue)")
             appLifecycleManager.endBackgroundTask()
             backgroundTaskID = .invalid
         }
@@ -2679,23 +2767,30 @@ class DecibelMeterManager: NSObject {
     
     /// 请求麦克风权限
     private func requestMicrophonePermission() async throws {
+        dmLog("🎤 检查麦克风权限...")
         let status = AVAudioSession.sharedInstance().recordPermission
         
         switch status {
         case .granted:
+            dmLog("✅ 麦克风权限已授予")
             return
         case .denied:
+            dmLog("❌ 麦克风权限被拒绝")
             throw DecibelMeterError.microphonePermissionDenied
         case .undetermined:
+            dmLog("❓ 麦克风权限未确定，请求权限...")
             let granted = await withCheckedContinuation { continuation in
                 AVAudioSession.sharedInstance().requestRecordPermission { granted in
                     continuation.resume(returning: granted)
                 }
             }
             if !granted {
+                dmLog("❌ 用户拒绝了麦克风权限")
                 throw DecibelMeterError.microphonePermissionDenied
             }
+            dmLog("✅ 用户授予了麦克风权限")
         @unknown default:
+            dmLog("❌ 未知的麦克风权限状态")
             throw DecibelMeterError.microphonePermissionDenied
         }
     }
@@ -2714,7 +2809,7 @@ class DecibelMeterManager: NSObject {
         
         // 设置输入格式
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        print("输入格式: \(inputFormat)")
+        dmLog("输入格式: \(inputFormat)")
         
         // 安装音频处理块
         inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
@@ -2726,23 +2821,31 @@ class DecibelMeterManager: NSObject {
     /// 启动音频引擎
     private func startAudioEngine() throws {
         guard let audioEngine = audioEngine else {
+            dmLog("❌ 音频引擎不存在，无法启动")
             throw DecibelMeterError.audioEngineSetupFailed
         }
         
+        dmLog("▶️ 启动音频引擎...")
         try audioEngine.start()
+        dmLog("✅ 音频引擎已启动")
     }
     
     /// 停止音频引擎
     private func stopAudioEngine() {
+        dmLog("🛑 停止音频引擎...")
         audioEngine?.stop()
         inputNode?.removeTap(onBus: 0)
         audioEngine = nil
         inputNode = nil
+        dmLog("✅ 音频引擎已停止")
     }
     
     /// 处理音频缓冲区
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData?[0] else { return }
+        guard let channelData = buffer.floatChannelData?[0] else {
+            dmLog("⚠️ 音频缓冲区数据无效")
+            return
+        }
         let frameCount = Int(buffer.frameLength)
         
         // 转换为数组
@@ -2765,7 +2868,7 @@ class DecibelMeterManager: NSObject {
                     // 写入音频缓冲区
                     try file.write(from: buffer)
                 } catch {
-                    print("❌ 写入音频文件失败: \(error.localizedDescription)")
+                    self?.dmLog("❌ 写入音频文件失败: \(error.localizedDescription)")
                     // 如果写入失败，停止录制以避免持续错误
                     DispatchQueue.main.async {
                         self?.stopAudioRecording()
@@ -2936,20 +3039,31 @@ class DecibelMeterManager: NSObject {
     ///
     /// - Throws: DecibelMeterError 如果录制启动失败
     func startAudioRecording() throws {
+        dmLog("📹 开始音频录制...")
+        
         guard audioEngine != nil else {
+            dmLog("❌ 音频引擎不存在，无法开始录制")
             throw DecibelMeterError.audioEngineSetupFailed
         }
         
-        // 如果已经在录制，先停止
+        // 如果已经在录制，先停止（同步删除，确保文件完全删除）
         if isRecordingAudio {
-            stopAudioRecording()
+            dmLog("   - 检测到已有录制，先停止...")
+            stopAudioRecording(sync: true)
         }
         
         let tempURL = getTempRecordingURL()
         
-        // 删除已存在的临时文件
+        // 确保删除已存在的临时文件（如果还有残留）
         if FileManager.default.fileExists(atPath: tempURL.path) {
-            try? FileManager.default.removeItem(at: tempURL)
+            dmLog("   - 删除已存在的临时文件")
+            do {
+                try FileManager.default.removeItem(at: tempURL)
+                // 稍微等待一下，确保文件系统更新
+                Thread.sleep(forTimeInterval: 0.05)
+            } catch {
+                dmLog("   ⚠️ 删除已存在文件失败: \(error.localizedDescription)")
+            }
         }
         
         // 获取输入音频格式
@@ -2970,13 +3084,13 @@ class DecibelMeterManager: NSObject {
             isRecordingAudio = true
             recordingStartTime = Date()
             
-            print("✅ 开始录制到临时文件: \(tempRecordingFileName)")
-            print("   音频格式: 采样率=\(inputFormat.sampleRate)Hz, 通道数=\(inputFormat.channelCount), 格式=PCM")
-            print("   输入格式: \(inputFormat)")
-            print("   文件格式: \(audioFile?.fileFormat ?? inputFormat)")
+            dmLog("✅ 开始录制到临时文件: \(tempRecordingFileName)")
+            dmLog("   音频格式: 采样率=\(inputFormat.sampleRate)Hz, 通道数=\(inputFormat.channelCount), 格式=PCM")
+            dmLog("   输入格式: \(inputFormat)")
+            dmLog("   文件格式: \(audioFile?.fileFormat ?? inputFormat)")
         } catch {
-            print("❌ 创建音频文件失败: \(error.localizedDescription)")
-            print("   错误详情: \(error)")
+            dmLog("❌ 创建音频文件失败: \(error.localizedDescription)")
+            dmLog("   错误详情: \(error)")
             throw DecibelMeterError.audioFileWriteFailed
         }
     }
@@ -2984,7 +3098,9 @@ class DecibelMeterManager: NSObject {
     /// 停止音频录制并删除临时文件
     ///
     /// 关闭音频文件并删除临时录音文件
-    func stopAudioRecording() {
+    ///
+    /// - Parameter sync: 是否同步删除文件，默认为false（异步删除）。如果为true，会等待文件删除完成
+    func stopAudioRecording(sync: Bool = false) {
         guard isRecordingAudio else { return }
         
         // 关闭文件
@@ -2993,19 +3109,38 @@ class DecibelMeterManager: NSObject {
         
         // 删除临时文件
         let tempURL = getTempRecordingURL()
-        fileAccessQueue.async { [weak self] in
-            guard let self = self else { return }
-            if FileManager.default.fileExists(atPath: tempURL.path) {
-                do {
-                    // 稍微延迟一下，确保文件完全关闭
-                    Thread.sleep(forTimeInterval: 0.1)
-                    try FileManager.default.removeItem(at: tempURL)
-                    print("🗑️ 已删除临时录音文件")
-                } catch {
-                    print("⚠️ 删除临时文件失败: \(error.localizedDescription)")
+        
+        if sync {
+            // 同步删除：在文件访问队列中同步执行，确保文件删除完成
+            fileAccessQueue.sync {
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    do {
+                        // 稍微延迟一下，确保文件完全关闭
+                        Thread.sleep(forTimeInterval: 0.1)
+                        try FileManager.default.removeItem(at: tempURL)
+                        dmLog("🗑️ 已删除临时录音文件（同步）")
+                    } catch {
+                        dmLog("⚠️ 删除临时文件失败: \(error.localizedDescription)")
+                    }
                 }
+                recordingStartTime = nil
             }
-            self.recordingStartTime = nil
+        } else {
+            // 异步删除：不阻塞当前线程
+            fileAccessQueue.async { [weak self] in
+                guard let self = self else { return }
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    do {
+                        // 稍微延迟一下，确保文件完全关闭
+                        Thread.sleep(forTimeInterval: 0.1)
+                        try FileManager.default.removeItem(at: tempURL)
+                        self.dmLog("🗑️ 已删除临时录音文件")
+                    } catch {
+                        self.dmLog("⚠️ 删除临时文件失败: \(error.localizedDescription)")
+                    }
+                }
+                self.recordingStartTime = nil
+            }
         }
     }
     
@@ -3031,9 +3166,14 @@ class DecibelMeterManager: NSObject {
         let tempURL = getTempRecordingURL()
         let fileManager = FileManager.default
         let currentlyRecording = isRecordingAudio
+        dmLog("📋 复制录音文件...")
+        dmLog("   - 源文件: \(tempURL.path)")
+        dmLog("   - 目标文件: \(destinationURL.path)")
+        dmLog("   - 录制状态: \(currentlyRecording ? "进行中" : "已停止")")
         
         // 检查源文件是否存在
         guard fileManager.fileExists(atPath: tempURL.path) else {
+            dmLog("❌ 源文件不存在")
             completion(.failure(DecibelMeterError.audioFileNotFound), 0, false)
             return
         }
@@ -3068,20 +3208,22 @@ class DecibelMeterManager: NSObject {
                 let destAttributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
                 let destFileSize = destAttributes[.size] as? Int64 ?? 0
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     if destFileSize > 0 {
-                        print("✅ 录音文件已复制: \(destinationURL.lastPathComponent) (\(destFileSize) 字节)")
+                        self?.dmLog("✅ 录音文件已复制: \(destinationURL.lastPathComponent) (\(destFileSize) 字节)")
                         if currentlyRecording {
-                            print("⚠️ 注意：录制还在进行中，复制的文件可能不完整")
+                            self?.dmLog("⚠️ 注意：录制还在进行中，复制的文件可能不完整")
                         }
                         completion(.success(destinationURL), destFileSize, !currentlyRecording)
                     } else {
+                        self?.dmLog("❌ 复制的文件大小为0，无效")
                         completion(.failure(DecibelMeterError.invalidAudioFile), 0, false)
                     }
                 }
             } catch {
-                DispatchQueue.main.async {
-                    print("❌ 复制录音文件失败: \(error.localizedDescription)")
+                DispatchQueue.main.async { [weak self] in
+                    self?.dmLog("❌ 复制录音文件失败: \(error.localizedDescription)")
+                    self?.dmLog("   错误详情: \(error)")
                     completion(.failure(error), 0, false)
                 }
             }
@@ -3153,16 +3295,16 @@ class DecibelMeterManager: NSObject {
     @discardableResult
     func pauseAudioCapture() -> Bool {
         guard measurementState == .measuring, let engine = audioEngine else {
-            print("⚠️ 无法暂停音频采集：未在测量中")
+            dmLog("⚠️ 无法暂停音频采集：未在测量中")
             return false
         }
         
         // 停止音频引擎（但不改变测量状态）
         engine.pause()
         
-        print("⏸️ 音频采集已暂停（播放音频时优化音量）")
-        print("   - 测量状态保持: \(measurementState)")
-        print("   - 音频引擎已暂停")
+        dmLog("⏸️ 音频采集已暂停（播放音频时优化音量）")
+        dmLog("   - 测量状态保持: \(measurementState.stringValue)")
+        dmLog("   - 音频引擎已暂停")
         
         return true
     }
@@ -3175,13 +3317,13 @@ class DecibelMeterManager: NSObject {
     @discardableResult
     func resumeAudioCapture() -> Bool {
         guard measurementState == .measuring, let engine = audioEngine else {
-            print("⚠️ 无法恢复音频采集：未在测量中")
+            dmLog("⚠️ 无法恢复音频采集：未在测量中")
             return false
         }
         
         // 如果引擎已经在运行，不需要再次启动
         if engine.isRunning {
-            print("ℹ️ 音频引擎已经在运行，无需恢复")
+            dmLog("ℹ️ 音频引擎已经在运行，无需恢复")
             return true
         }
         
@@ -3189,12 +3331,12 @@ class DecibelMeterManager: NSObject {
             // 重新启动音频引擎
             try engine.start()
             
-            print("▶️ 音频采集已恢复")
-            print("   - 音频引擎已重启")
+            dmLog("▶️ 音频采集已恢复")
+            dmLog("   - 音频引擎已重启")
             
             return true
         } catch {
-            print("❌ 恢复音频采集失败: \(error.localizedDescription)")
+            dmLog("❌ 恢复音频采集失败: \(error.localizedDescription)")
             return false
         }
     }
