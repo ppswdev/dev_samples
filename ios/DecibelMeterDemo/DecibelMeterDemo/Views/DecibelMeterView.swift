@@ -16,6 +16,7 @@
 import SwiftUI
 import Charts
 import AVFoundation
+import Combine
 
 struct DecibelMeterView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
@@ -861,11 +862,29 @@ struct TimeHistoryChartView: View {
 ///
 /// 显示各频段的声压级分布，符合 IEC 61260-1 标准的倍频程分析要求
 /// 支持1/1倍频程（10个频点）和1/3倍频程（30个频点）切换显示
+/// 支持流畅的实时动画效果
 struct SpectrumAnalysisChartView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
     @State private var selectedBandType: String = "1/3"
-    @State private var cachedData: SpectrumChartData?
-    @State private var lastUpdateTime: Date = Date()
+    @State private var chartData: SpectrumChartData?
+    @State private var animationTrigger: UUID = UUID() // 用于触发动画更新
+    
+    // MARK: - 动画配置
+    
+    /// 更新频率（帧率）
+    /// - 默认：30fps（约33毫秒），提供流畅的动画效果
+    /// - 可调整为：60fps（0.017秒）更流畅但更耗电，或24fps（0.042秒）更省电
+    private let updateInterval: TimeInterval = 0.033
+    
+    /// 动画响应时间（秒）
+    /// - 较小的值（0.15-0.2）：更快的响应，波动更频繁
+    /// - 较大的值（0.3-0.5）：更慢的响应，波动更平滑
+    private let animationResponse: Double = 0.2
+    
+    /// 动画阻尼系数（0-1）
+    /// - 接近1.0：几乎没有弹性，更平滑
+    /// - 接近0.7：有轻微弹性，更生动
+    private let animationDamping: Double = 0.8
     
     var body: some View {
         VStack(spacing: 15) {
@@ -881,21 +900,23 @@ struct SpectrumAnalysisChartView: View {
                     Text("1/3倍频程").tag("1/3")
                     Text("1/1倍频程").tag("1/1")
                 }
-                .pickerStyle(SegmentedPickerStyle())
+                .pickerStyle(.segmented)
                 .frame(width: 150)
             }
             
-            // Swift Charts 实现
+            // Swift Charts 实现 - 支持流畅动画
             Chart {
-                ForEach(getChartData().dataPoints, id: \.id) { dataPoint in
-                    // 使用 BarMark，明确指定 yStart 和 yEnd 来避免尺寸警告
-                    // 对于对数坐标轴，明确指定起点和终点可以让 Swift Charts 正确计算尺寸
-                    BarMark(
-                        x: .value("频率", dataPoint.frequency),
-                        yStart: .value("基线", 0),
-                        yEnd: .value("声压级", dataPoint.magnitude)
-                    )
-                    .foregroundStyle(.green)
+                if let data = chartData {
+                    ForEach(data.dataPoints, id: \.id) { dataPoint in
+                        // 使用 BarMark，明确指定 yStart 和 yEnd 来避免尺寸警告
+                        // 对于对数坐标轴，明确指定起点和终点可以让 Swift Charts 正确计算尺寸
+                        BarMark(
+                            x: .value("频率", dataPoint.frequency),
+                            yStart: .value("基线", 0),
+                            yEnd: .value("声压级", dataPoint.magnitude)
+                        )
+                        .foregroundStyle(.green)
+                    }
                 }
             }
             .frame(height: 200)
@@ -931,47 +952,56 @@ struct SpectrumAnalysisChartView: View {
             
             // 图表信息
             HStack {
-                Text("频率范围: \(formatFrequency(getChartData().frequencyRange.min)) - \(formatFrequency(getChartData().frequencyRange.max))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text("频点数: \(getChartData().dataPoints.count)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if let data = chartData {
+                    Text("频率范围: \(formatFrequency(data.frequencyRange.min)) - \(formatFrequency(data.frequencyRange.max))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("频点数: \(data.dataPoints.count)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("加载中...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding()
         .background(Color.green.opacity(0.1))
         .cornerRadius(15)
+        .onAppear {
+            // 立即加载一次数据
+            updateChartData()
+        }
         .onChange(of: selectedBandType) { _ in
-            // 当倍频程类型改变时，清除缓存
-            DispatchQueue.main.async {
-                cachedData = nil
+            // 当倍频程类型改变时，立即更新数据
+            updateChartData()
+        }
+        // 使用 Combine Timer 来高频率更新数据（仅在测量状态时）
+        .onReceive(Timer.publish(every: updateInterval, on: .main, in: .common).autoconnect()) { _ in
+            // 只在测量状态时更新
+            if viewModel.measurementState == .measuring {
+                updateChartData()
             }
         }
     }
     
-    private func getChartData() -> SpectrumChartData {
-        let now = Date()
-        
-        // 如果缓存数据存在且时间间隔小于1秒，使用缓存数据
-        if let cached = cachedData,
-           now.timeIntervalSince(lastUpdateTime) < 1.0 {
-            return cached
-        }
-        
-        // 获取新数据并更新缓存
+    // MARK: - 数据更新
+    
+    /// 更新图表数据
+    /// 
+    /// 高频率调用此方法（约30fps）来实现流畅的频谱动画效果
+    private func updateChartData() {
         let newData = viewModel.getSpectrumChartData(bandType: selectedBandType)
         
-        // 在主线程更新缓存状态
-        DispatchQueue.main.async {
-            cachedData = newData
-            lastUpdateTime = now
+        // 使用动画更新数据，实现流畅的过渡效果
+        withAnimation(.spring(response: animationResponse, dampingFraction: animationDamping)) {
+            chartData = newData
+            animationTrigger = UUID() // 触发动画更新
         }
-        
-        return newData
     }
     
     private func formatFrequency(_ frequency: Double) -> String {
