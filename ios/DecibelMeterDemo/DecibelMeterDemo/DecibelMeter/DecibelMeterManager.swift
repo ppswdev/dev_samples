@@ -19,6 +19,7 @@ import Foundation
 import AVFoundation
 import Combine
 import UIKit
+import Accelerate
 
 // MARK: - 数据模型
 // 注意：DecibelMeasurement 定义在 DecibelDataModels.swift 中
@@ -344,8 +345,6 @@ class DecibelMeterManager: NSObject {
     /// UI更新间隔（秒）- 降低更新频率以节省内存和CPU
     private let uiUpdateInterval: TimeInterval = 0.1  // 100ms更新一次，从21.5Hz降低到10Hz
     
-    /// 缓存的频谱数据（避免重复计算随机数）
-    private var cachedSpectrum: [Double]?
     
     /// 内存监控定时器
     private var memoryMonitorTimer: Timer?
@@ -736,14 +735,14 @@ class DecibelMeterManager: NSObject {
     /// 获取分贝计测量历史（线程安全）
     func getDecibelMeterHistory() -> [DecibelMeasurement] {
         return historyQueue.sync {
-            return decibelMeterHistory
+        return decibelMeterHistory
         }
     }
     
     /// 获取噪音测量计测量历史（线程安全）
     func getNoiseMeterHistory() -> [DecibelMeasurement] {
         return historyQueue.sync {
-            return noiseMeterHistory
+        return noiseMeterHistory
         }
     }
     
@@ -816,18 +815,18 @@ class DecibelMeterManager: NSObject {
     /// 获取分贝计实时LEQ值（线程安全）
     func getDecibelMeterRealTimeLeq() -> Double {
         return historyQueue.sync {
-            guard !decibelMeterHistory.isEmpty else { return 0.0 }
-            let decibelValues = decibelMeterHistory.map { $0.calibratedDecibel }
-            return calculateLeq(from: decibelValues)
+        guard !decibelMeterHistory.isEmpty else { return 0.0 }
+        let decibelValues = decibelMeterHistory.map { $0.calibratedDecibel }
+        return calculateLeq(from: decibelValues)
         }
     }
     
     /// 获取噪音测量计实时LEQ值（线程安全）
     func getNoiseMeterRealTimeLeq() -> Double {
         return historyQueue.sync {
-            guard !noiseMeterHistory.isEmpty else { return 0.0 }
-            let decibelValues = noiseMeterHistory.map { $0.calibratedDecibel }
-            return calculateLeq(from: decibelValues)
+        guard !noiseMeterHistory.isEmpty else { return 0.0 }
+        let decibelValues = noiseMeterHistory.map { $0.calibratedDecibel }
+        return calculateLeq(from: decibelValues)
         }
     }
     
@@ -846,7 +845,7 @@ class DecibelMeterManager: NSObject {
     /// **注意**：返回的是已应用校准偏移的值
     func getNoiseMeterMax() -> Double {
         return historyQueue.sync {
-            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+        guard !noiseMeterHistory.isEmpty else { return -1.0 }
             // ⭐ 修复：使用 calibratedDecibel（已包含校准偏移）而不是 fastDecibel
             // 由于噪音测量计使用 fastDecibel，而 calibratedDecibel = fastDecibel + calibrationOffset
             // 所以直接使用 calibratedDecibel 即可
@@ -859,7 +858,7 @@ class DecibelMeterManager: NSObject {
     /// **注意**：返回的是已应用校准偏移的值
     func getNoiseMeterMin() -> Double {
         return historyQueue.sync {
-            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+        guard !noiseMeterHistory.isEmpty else { return -1.0 }
             // ⭐ 修复：使用 calibratedDecibel（已包含校准偏移）而不是 fastDecibel
             return noiseMeterHistory.map { $0.calibratedDecibel }.min() ?? -1.0
         }
@@ -874,7 +873,7 @@ class DecibelMeterManager: NSObject {
     /// - 如果校准值在测量过程中未改变，这样可以正确反映真实的瞬时峰值
     func getNoiseMeterPeak() -> Double {
         return historyQueue.sync {
-            guard !noiseMeterHistory.isEmpty else { return -1.0 }
+        guard !noiseMeterHistory.isEmpty else { return -1.0 }
             // ⭐ 修复：PEAK 应该使用 rawDecibel（瞬时峰值）+ 校准偏移
             // 这样得到的是真实的瞬时峰值，已应用校准但未应用时间权重
             return (noiseMeterHistory.map { $0.rawDecibel + calibrationOffset }.max() ?? -1.0)
@@ -1207,76 +1206,201 @@ class DecibelMeterManager: NSObject {
     
     /// 获取频谱分析图数据
     ///
-    /// 返回各频段的声压级分布数据，用于绘制频谱分析图
-    /// 符合 IEC 61260-1 标准的倍频程分析要求
+    /// 返回频谱分析数据，支持 FFT 频谱、1/1倍频程或1/3倍频程显示
+    /// 数据来源于实时音频采集的 FFT 分析结果，并应用当前的频率权重
     ///
-    /// - Parameter bandType: 倍频程类型，"1/1"（10个频点）或"1/3"（30个频点），默认"1/3"
-    /// - Returns: SpectrumChartData对象，包含各频率点的声压级数据
+    /// - Parameter bandType: 频段类型，"1/1"（1/1倍频程）、"1/3"（1/3倍频程）或 "FFT"（FFT频谱），默认为 "1/3"
+    /// - Returns: SpectrumChartData对象，包含频谱数据点
     ///
     /// **图表要求**：
     /// - 横轴：频率（Hz）- 对数坐标
-    /// - 纵轴：声压级（dB）
-    /// - 显示：1/1倍频程或1/3倍频程柱状图
+    /// - 纵轴：声压级（dB）- 已应用频率权重
+    /// - 显示：根据 bandType 显示倍频程柱状图或 FFT 频谱曲线
     ///
-    /// **频率点**：
-    /// - 1/1倍频程：31.5, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
-    /// - 1/3倍频程：25, 31.5, 40, 50, 63, 80, 100, 125, ... 20k Hz
+    /// **数据来源**：currentMeasurement.frequencySpectrum（FFT 分析结果）
     ///
-    /// **数据来源**：frequencySpectrum数组或基于权重的模拟数据
-    ///
-    /// **支持JSON转换**：
-    /// ```swift
-    /// let data = manager.getSpectrumChartData(bandType: "1/3")
-    /// let json = data.toJSON()
-    /// ```
+    /// **频率权重**：自动应用当前设置的频率权重（A、B、C、Z、ITU-R 468）
     ///
     /// **使用示例**：
     /// ```swift
-    /// // 1/1倍频程
-    /// let spectrum1_1 = manager.getSpectrumChartData(bandType: "1/1")
-    ///
-    /// // 1/3倍频程
-    /// let spectrum1_3 = manager.getSpectrumChartData(bandType: "1/3")
-    /// dmLog("频率点数量: \(spectrum1_3.dataPoints.count)")
+    /// let spectrum1_1 = manager.getSpectrumChartData(bandType: "1/1")  // 1/1倍频程
+    /// let spectrum1_3 = manager.getSpectrumChartData(bandType: "1/3")  // 1/3倍频程
+    /// let spectrumFFT = manager.getSpectrumChartData(bandType: "FFT")  // FFT频谱
     /// ```
     func getSpectrumChartData(bandType: String = "1/3") -> SpectrumChartData {
-        let frequencies: [Double]
-        
-        if bandType == "1/1" {
-            // 1/1倍频程标准频率
-            frequencies = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-        } else {
-            // 1/3倍频程标准频率
-            frequencies = [25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]
-        }
-        
-        // 使用当前测量的频谱数据或模拟数据
-        let dataPoints = frequencies.enumerated().map { index, frequency in
-            let magnitude: Double
-            if let spectrum = currentMeasurement?.frequencySpectrum,
-               index < spectrum.count {
-                // 使用实际频谱数据并转换为dB
-                magnitude = 20.0 * log10(spectrum[index] + 1e-10) + currentDecibel
-            } else {
-                // 模拟数据：基于当前分贝值和频率权重
-                let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: frequency) ?? 0.0
-                // 使用基于频率的确定性噪声，避免随机数导致的频繁重绘
-                let noise = sin(frequency * 0.001) * 3.0
-                magnitude = currentDecibel + weightCompensation + noise
-            }
-            
-            return SpectrumDataPoint(
-                frequency: frequency,
-                magnitude: max(0, min(140, magnitude)),
-                bandType: bandType
+        // 获取当前 FFT 频谱数据
+        guard let fftMagnitudes = currentMeasurement?.frequencySpectrum, !fftMagnitudes.isEmpty else {
+            // 如果没有频谱数据，返回空数据
+            let bandTypeName = bandType == "1/1" ? "1/1倍频程" : (bandType == "1/3" ? "1/3倍频程" : "FFT频谱")
+            return SpectrumChartData(
+                dataPoints: [],
+                bandType: bandTypeName,
+                frequencyRange: (min: 20, max: 20000),
+                title: "频谱分析 - \(bandTypeName) - \(getDecibelMeterWeightingDisplayText())"
             )
         }
         
+        // FFT 参数
+        let fftSize = fftMagnitudes.count * 2  // FFT 总大小（只保存了一半）
+        let frequencyResolution = sampleRate / Double(fftSize)  // 每个 bin 的频率分辨率
+        
+        // 根据 bandType 选择不同的处理方式
+        switch bandType {
+        case "1/1":
+            return getOctaveBandData(fftMagnitudes: fftMagnitudes, frequencyResolution: frequencyResolution, isOneThird: false)
+        case "1/3":
+            return getOctaveBandData(fftMagnitudes: fftMagnitudes, frequencyResolution: frequencyResolution, isOneThird: true)
+        default:
+            // FFT 频谱模式
+            return getFFTSpectrumData(fftMagnitudes: fftMagnitudes, frequencyResolution: frequencyResolution)
+        }
+    }
+    
+    /// 获取倍频程频段数据
+    private func getOctaveBandData(fftMagnitudes: [Double], frequencyResolution: Double, isOneThird: Bool) -> SpectrumChartData {
+        // 标准倍频程中心频率（IEC 61260-1）
+        let centerFrequencies: [Double] = isOneThird ? [
+            // 1/3倍频程中心频率
+            25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200,
+            250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000,
+            2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000
+        ] : [
+            // 1/1倍频程中心频率
+            31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000
+        ]
+        
+        var dataPoints: [SpectrumDataPoint] = []
+        
+        // 找到最大幅度值，用于归一化
+        let maxMagnitude = fftMagnitudes.max() ?? 1e-10
+        
+        // 对每个倍频程频段计算能量
+        for centerFreq in centerFrequencies {
+            // 计算频段的上限和下限频率（IEC 61260-1 标准）
+            let (lowerFreq, upperFreq): (Double, Double)
+            if isOneThird {
+                // 1/3倍频程：上限频率/下限频率 = 2^(1/3) ≈ 1.260
+                // 中心频率 = sqrt(下限 * 上限)，所以：
+                // 下限 = 中心频率 / 2^(1/6) ≈ 中心频率 / 1.122
+                // 上限 = 中心频率 * 2^(1/6) ≈ 中心频率 * 1.122
+                let ratio = pow(2.0, 1.0/6.0)  // ≈ 1.122
+                lowerFreq = centerFreq / ratio
+                upperFreq = centerFreq * ratio
+            } else {
+                // 1/1倍频程：上限频率/下限频率 = 2
+                // 中心频率 = sqrt(下限 * 上限)，所以：
+                // 下限 = 中心频率 / sqrt(2) ≈ 中心频率 / 1.414
+                // 上限 = 中心频率 * sqrt(2) ≈ 中心频率 * 1.414
+                let ratio = sqrt(2.0)  // ≈ 1.414
+                lowerFreq = centerFreq / ratio
+                upperFreq = centerFreq * ratio
+            }
+            
+            // 找到对应的 FFT bin 索引范围
+            let lowerBinIndex = max(0, Int(lowerFreq / frequencyResolution))
+            let upperBinIndex = min(fftMagnitudes.count - 1, Int(upperFreq / frequencyResolution))
+            
+            // 计算该频段的能量（RMS 值）
+            var energySum: Double = 0.0
+            var binCount = 0
+            
+            for binIndex in lowerBinIndex...upperBinIndex {
+                let magnitude = fftMagnitudes[binIndex]
+                energySum += magnitude * magnitude  // 能量 = 幅度^2
+                binCount += 1
+            }
+            
+            // 计算 RMS 值（均方根）
+            let rmsMagnitude = binCount > 0 ? sqrt(energySum / Double(binCount)) : 0.0
+            
+            // 归一化幅度
+            let normalizedMagnitude = maxMagnitude > 1e-10 ? (rmsMagnitude / maxMagnitude) : 0.0
+            
+            // 转换为 dB
+            let epsilon = 1e-6
+            let safeMagnitude = max(normalizedMagnitude, epsilon)
+            let rawDb = 20.0 * log10(safeMagnitude)
+            var magnitudeDb = rawDb + 120.0
+            
+            // 应用频率权重
+            let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: centerFreq) ?? 0.0
+            magnitudeDb += weightCompensation
+            
+            // 限制范围
+            let clampedMagnitude = max(0, min(120, magnitudeDb))
+            
+            dataPoints.append(SpectrumDataPoint(
+                frequency: centerFreq,
+                magnitude: clampedMagnitude,
+                bandType: isOneThird ? "1/3" : "1/1"
+            ))
+        }
+        
+        let bandTypeName = isOneThird ? "1/3倍频程" : "1/1倍频程"
         return SpectrumChartData(
             dataPoints: dataPoints,
-            bandType: bandType == "1/1" ? "1/1倍频程" : "1/3倍频程",
-            frequencyRange: (min: frequencies.first ?? 20, max: frequencies.last ?? 20000),
-            title: "频谱分析 - \(getDecibelMeterWeightingDisplayText())"
+            bandType: bandTypeName,
+            frequencyRange: (min: centerFrequencies.first ?? 20, max: centerFrequencies.last ?? 20000),
+            title: "频谱分析 - \(bandTypeName) - \(getDecibelMeterWeightingDisplayText())"
+        )
+    }
+    
+    /// 获取 FFT 频谱数据
+    private func getFFTSpectrumData(fftMagnitudes: [Double], frequencyResolution: Double) -> SpectrumChartData {
+        // 计算要显示的频率范围（通常显示 20Hz - 20kHz）
+        let minFreq = 20.0
+        let maxFreq = 20000.0
+        let minBinIndex = max(0, Int(minFreq / frequencyResolution))
+        let maxBinIndex = min(fftMagnitudes.count - 1, Int(maxFreq / frequencyResolution))
+        
+        // 创建数据点
+        let totalBins = maxBinIndex - minBinIndex + 1
+        let maxDisplayPoints = 800  // 最多显示 800 个点，保证流畅度和细节
+        let downsampleFactor = max(1, totalBins / maxDisplayPoints)
+        
+        // 找到最大幅度值，用于归一化
+        let maxMagnitude = fftMagnitudes.max() ?? 1e-10
+        
+        var dataPoints: [SpectrumDataPoint] = []
+        
+        // 使用步进方式采样，保证频率覆盖
+        for binIndex in stride(from: minBinIndex, through: maxBinIndex, by: downsampleFactor) {
+            let frequency = Double(binIndex) * frequencyResolution
+            
+            // 获取该 bin 的幅度
+            let magnitude = fftMagnitudes[binIndex]
+            
+            // 归一化幅度
+            let normalizedMagnitude = maxMagnitude > 1e-10 ? (magnitude / maxMagnitude) : 0.0
+            
+            // 转换为 dB
+            let epsilon = 1e-6
+            let safeMagnitude = max(normalizedMagnitude, epsilon)
+            let rawDb = 20.0 * log10(safeMagnitude)
+            var magnitudeDb = rawDb + 120.0
+            
+            // 应用频率权重
+            let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: frequency) ?? 0.0
+            magnitudeDb += weightCompensation
+            
+            // 限制范围
+            let clampedMagnitude = max(0, min(120, magnitudeDb))
+            
+            dataPoints.append(SpectrumDataPoint(
+                frequency: frequency,
+                magnitude: clampedMagnitude,
+                bandType: "FFT"
+            ))
+        }
+        
+        // 确保数据点按频率排序
+        let sortedDataPoints = dataPoints.sorted(by: { $0.frequency < $1.frequency })
+        
+        return SpectrumChartData(
+            dataPoints: sortedDataPoints,
+            bandType: "FFT频谱",
+            frequencyRange: (min: minFreq, max: maxFreq),
+            title: "FFT频谱分析 - \(getDecibelMeterWeightingDisplayText())"
         )
     }
     
@@ -1520,8 +1644,8 @@ class DecibelMeterManager: NSObject {
             let noiseCount = noiseMeterHistory.count
             let accumulatorCount = levelDurationsAccumulator.count
             
-            decibelMeterHistory.removeAll()
-            noiseMeterHistory.removeAll()
+        decibelMeterHistory.removeAll()
+        noiseMeterHistory.removeAll()
             levelDurationsAccumulator.removeAll()  // 清空累计时长累加器
             
             return (decibelCount, noiseCount, accumulatorCount)
@@ -1625,19 +1749,18 @@ class DecibelMeterManager: NSObject {
     /// 在内存使用过高时清理不必要的缓存和数据
     private func performMemoryCleanup() {
         // 清理频谱缓存
-        cachedSpectrum = nil
         
         // 如果历史记录过多，进一步清理（线程安全）
         historyQueue.sync {
-            if decibelMeterHistory.count > maxHistoryCount / 2 {
-                let removeCount = decibelMeterHistory.count / 2
-                decibelMeterHistory.removeFirst(removeCount)
+        if decibelMeterHistory.count > maxHistoryCount / 2 {
+            let removeCount = decibelMeterHistory.count / 2
+            decibelMeterHistory.removeFirst(removeCount)
                 dmLog("🧹 清理分贝计历史记录: 移除 \(removeCount) 条")
-            }
-            
-            if noiseMeterHistory.count > maxHistoryCount / 2 {
-                let removeCount = noiseMeterHistory.count / 2
-                noiseMeterHistory.removeFirst(removeCount)
+        }
+        
+        if noiseMeterHistory.count > maxHistoryCount / 2 {
+            let removeCount = noiseMeterHistory.count / 2
+            noiseMeterHistory.removeFirst(removeCount)
                 dmLog("🧹 清理噪音计历史记录: 移除 \(removeCount) 条")
             }
         }
@@ -2166,19 +2289,19 @@ class DecibelMeterManager: NSObject {
                 totalAccumulatedTime += duration
                 
                 // 找到该分贝值所属的声级区间
-                // 例如：87dB 归类到 85dB，92dB 归类到 91dB
-                var targetLevel: Double? = nil
-                
-                // 从高到低遍历声级列表，找到第一个小于或等于当前分贝值的限值
-                for i in stride(from: soundLevels.count - 1, through: 0, by: -1) {
+            // 例如：87dB 归类到 85dB，92dB 归类到 91dB
+            var targetLevel: Double? = nil
+            
+            // 从高到低遍历声级列表，找到第一个小于或等于当前分贝值的限值
+            for i in stride(from: soundLevels.count - 1, through: 0, by: -1) {
                     if recordedLevel >= soundLevels[i] {
-                        targetLevel = soundLevels[i]
-                        break
-                    }
+                    targetLevel = soundLevels[i]
+                    break
                 }
-                
-                // 如果找到了目标限值，累加时间
-                if let targetLevel = targetLevel {
+            }
+            
+            // 如果找到了目标限值，累加时间
+            if let targetLevel = targetLevel {
                     levelDurations[targetLevel, default: 0.0] += duration
                     classifiedSamples += 1
                 }
@@ -2439,7 +2562,7 @@ class DecibelMeterManager: NSObject {
     func clearDecibelMeterHistory() {
         let count = historyQueue.sync {
             let count = decibelMeterHistory.count
-            decibelMeterHistory.removeAll()
+        decibelMeterHistory.removeAll()
             return count
         }
         dmLog("🗑️ 清除分贝计历史: \(count) 条记录")
@@ -2455,7 +2578,7 @@ class DecibelMeterManager: NSObject {
         let (noiseCount, accumulatorCount) = historyQueue.sync {
             let noiseCount = noiseMeterHistory.count
             let accumulatorCount = levelDurationsAccumulator.count
-            noiseMeterHistory.removeAll()
+        noiseMeterHistory.removeAll()
             levelDurationsAccumulator.removeAll()  // 同时清空累计时长
             return (noiseCount, accumulatorCount)
         }
@@ -2487,6 +2610,10 @@ class DecibelMeterManager: NSObject {
     
     /// 更新分贝计数据并通知回调
     private func updateDecibelMeterData(_ measurement: DecibelMeasurement) {
+        // ⭐ 修复：更新 currentMeasurement，这样频谱数据才能被访问
+        // 必须先更新 currentMeasurement，因为其他代码可能依赖它（如频谱分析图）
+        currentMeasurement = measurement
+        
         // 验证并限制分贝值在合理范围内
         let validatedDecibel = validateDecibelValue(measurement.calibratedDecibel)
         currentDecibel = validatedDecibel
@@ -2529,6 +2656,12 @@ class DecibelMeterManager: NSObject {
         
         // 计算当前LEQ值（基于分贝计历史）
         let currentLeq = getDecibelMeterRealTimeLeq()
+        
+        // 通知测量数据更新回调（包含频谱数据）
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.onMeasurementUpdate?(measurement)
+        }
         
         //dmLog("updateDecibelMeterData currentDecibel: \(currentDecibel), maxDecibel: \(maxDecibel), minDecibel: \(minDecibel), peakDecibel: \(peakDecibel), leq: \(currentLeq)")
         DispatchQueue.main.async { [weak self] in
@@ -2879,25 +3012,25 @@ class DecibelMeterManager: NSObject {
         
         // 线程安全地添加到各自的历史记录并管理长度
         historyQueue.sync {
-            // 添加到各自的历史记录
-            decibelMeterHistory.append(decibelMeterMeasurement)
-            noiseMeterHistory.append(noiseMeterMeasurement)
+        // 添加到各自的历史记录
+        decibelMeterHistory.append(decibelMeterMeasurement)
+        noiseMeterHistory.append(noiseMeterMeasurement)
             
             // ⭐ 实时更新累计时长累加器（用于允许暴露时长表）
             // 将当前噪音测量值的分贝四舍五入到整数，累加采样间隔
             let roundedLevel = round(noiseMeterMeasurement.calibratedDecibel)
             levelDurationsAccumulator[roundedLevel, default: 0.0] += sampleInterval
-            
-            // 优化历史记录长度管理 - 批量移除以提高性能
+        
+        // 优化历史记录长度管理 - 批量移除以提高性能
             // ⚠️ 注意：移除历史记录不会影响累计时长累加器（levelDurationsAccumulator）
             // 累计时长是持久化的，不受历史记录清理影响
-            if decibelMeterHistory.count >= maxHistoryCount {
-                let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
-                decibelMeterHistory.removeFirst(removeCount)
-            }
-            if noiseMeterHistory.count >= maxHistoryCount {
-                let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
-                noiseMeterHistory.removeFirst(removeCount)
+        if decibelMeterHistory.count >= maxHistoryCount {
+            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+            decibelMeterHistory.removeFirst(removeCount)
+        }
+        if noiseMeterHistory.count >= maxHistoryCount {
+            let removeCount = maxHistoryCount / 2  // 移除一半，避免频繁操作
+            noiseMeterHistory.removeFirst(removeCount)
             }
         }
         
@@ -3011,15 +3144,113 @@ class DecibelMeterManager: NSObject {
         }
     }
     
-    /// 计算频谱（优化版 - 缓存随机数据）
+    /// 计算频谱（使用真实的 FFT 分析）
+    ///
+    /// 使用 Accelerate 框架的 vDSP 进行 FFT 分析，得到频率域的幅度谱
+    /// - Parameter samples: 音频样本数组（Float 类型，通常长度为 bufferSize）
+    /// - Returns: FFT 幅度谱数组（Double 类型），长度为 FFT 点数的一半（奈奎斯特频率）
+    ///           数组元素表示各频率 bin 的幅度值（未归一化到 dB）
     private func calculateFrequencySpectrum(from samples: [Float]) -> [Double] {
-        // 优化：缓存频谱数据，避免每次都生成新的随机数
-        // 实际应用中应该使用FFT分析真实频谱
-        if cachedSpectrum == nil {
-            // 只在第一次调用时生成随机频谱数据
-            cachedSpectrum = Array(0..<32).map { _ in Double.random(in: 0...1) }
+        guard !samples.isEmpty else {
+            return []
         }
-        return cachedSpectrum ?? []
+        
+        let sampleCount = samples.count
+        
+        // FFT 点数：使用输入长度（如果已经是 2 的幂次）
+        // 如果不是，向上取整到最近的 2 的幂次
+        let fftSize: Int
+        if sampleCount > 0 && (sampleCount & (sampleCount - 1)) == 0 {
+            // 已经是 2 的幂次
+            fftSize = sampleCount
+        } else {
+            fftSize = Int(pow(2, ceil(log2(Double(sampleCount)))))
+        }
+        
+        // 准备输入数据：填充到 FFT 大小（如果需要）
+        // 使用 Float 类型以提高性能，避免类型转换
+        var inputData = [Float](repeating: 0.0, count: fftSize)
+        for i in 0..<min(sampleCount, fftSize) {
+            inputData[i] = samples[i]
+        }
+        
+        // 创建输出数组（使用 Float 类型）
+        var outputReal = [Float](repeating: 0.0, count: fftSize)
+        var outputImag = [Float](repeating: 0.0, count: fftSize)
+        
+        // 创建 FFT 设置（Float 版本）
+        let log2n = vDSP_Length(log2(Double(fftSize)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            dmLog("⚠️ 无法创建 FFT 设置")
+            return []
+        }
+        defer {
+            vDSP_destroy_fftsetup(fftSetup)
+        }
+        
+        // 准备复数输入和输出（使用 Float 类型）
+        // 使用 withUnsafeMutableBufferPointer 获取正确的指针类型
+        return inputData.withUnsafeMutableBufferPointer { inputBuffer in
+            return outputReal.withUnsafeMutableBufferPointer { realBuffer in
+                return outputImag.withUnsafeMutableBufferPointer { imagBuffer in
+                    guard let inputBase = inputBuffer.baseAddress,
+                          let realBase = realBuffer.baseAddress,
+                          let imagBase = imagBuffer.baseAddress else {
+                        return []
+                    }
+                    
+                    var splitComplexInput = DSPSplitComplex(
+                        realp: inputBase,
+                        imagp: imagBase
+                    )
+                    var splitComplexOutput = DSPSplitComplex(
+                        realp: realBase,
+                        imagp: imagBase
+                    )
+                    
+                    // 执行 FFT（前向变换，Float 版本）
+                    vDSP_fft_zrop(fftSetup, &splitComplexInput, 1, &splitComplexOutput, 1, log2n, FFTDirection(FFT_FORWARD))
+                    
+                    // 计算幅度谱：magnitude = sqrt(real^2 + imag^2)
+                    // 只取前一半（奈奎斯特采样定理）
+                    let magnitudeCount = fftSize / 2
+                    var magnitudes = [Double](repeating: 0.0, count: magnitudeCount)
+                    
+                    for i in 0..<magnitudeCount {
+                        let real = Double(realBuffer[i])
+                        let imag = Double(imagBuffer[i])
+                        magnitudes[i] = sqrt(real * real + imag * imag)
+                    }
+                    
+                    // 归一化：除以 FFT 点数
+                    let scale = 1.0 / Double(fftSize)
+                    magnitudes.withUnsafeMutableBufferPointer { magBuffer in
+                        guard let magBase = magBuffer.baseAddress else { return }
+                        var scaleValue = scale
+                        vDSP_vsmulD(magBase, 1, &scaleValue, magBase, 1, vDSP_Length(magnitudeCount))
+                    }
+                    
+                    return magnitudes
+                }
+            }
+        }
+        
+        // 计算幅度谱：magnitude = sqrt(real^2 + imag^2)
+        // 只取前一半（奈奎斯特采样定理）
+        let magnitudeCount = fftSize / 2
+        var magnitudes = [Double](repeating: 0.0, count: magnitudeCount)
+        
+        for i in 0..<magnitudeCount {
+            let real = Double(outputReal[i])
+            let imag = Double(outputImag[i])
+            magnitudes[i] = sqrt(real * real + imag * imag)
+        }
+        
+        // 归一化：除以 FFT 点数
+        var scale = 1.0 / Double(fftSize)
+        vDSP_vsmulD(magnitudes, 1, &scale, &magnitudes, 1, vDSP_Length(magnitudeCount))
+        
+        return magnitudes
     }
     
     // MARK: - 音频录制方法

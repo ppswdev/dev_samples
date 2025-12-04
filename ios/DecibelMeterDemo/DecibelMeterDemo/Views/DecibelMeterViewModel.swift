@@ -570,11 +570,11 @@ extension DecibelMeterViewModel {
     
     /// 获取频谱分析图数据
     ///
-    /// 返回各频段的声压级分布数据，用于绘制频谱分析图
-    /// 符合 IEC 61260-1 标准的倍频程分析要求
+    /// 返回频谱分析数据，支持 FFT 频谱、1/1倍频程或1/3倍频程显示
+    /// 数据来源于实时音频采集的 FFT 分析结果，并自动应用当前的频率权重
     ///
-    /// - Parameter bandType: 倍频程类型，"1/1"或"1/3"，默认"1/3"
-    /// - Returns: SpectrumChartData对象
+    /// - Parameter bandType: 频段类型，"1/1"（1/1倍频程）、"1/3"（1/3倍频程）或 "FFT"（FFT频谱），默认为 "1/3"
+    /// - Returns: SpectrumChartData对象，包含频谱数据点
     func getSpectrumChartData(bandType: String = "1/3") -> SpectrumChartData {
         return decibelManager.getSpectrumChartData(bandType: bandType)
     }

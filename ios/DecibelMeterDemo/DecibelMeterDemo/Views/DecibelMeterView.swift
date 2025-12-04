@@ -81,8 +81,11 @@ struct DecibelMeterView: View {
                             // 时间历程图 - 实时分贝曲线
                             TimeHistoryChartView(viewModel: viewModel)
                             
-                           // 频谱分析图 - 1/1和1/3倍频程
-                           SpectrumAnalysisChartView(viewModel: viewModel)
+                           // 频谱分析图 - 1/1倍频程
+                           SpectrumAnalysis11ChartView(viewModel: viewModel)
+
+                           // 频谱分析图 - 1/3倍频程
+                           SpectrumAnalysis13ChartView(viewModel: viewModel)
                            
                            // 统计分布图 - L10、L50、L90
                            StatisticalDistributionChartView(viewModel: viewModel)
@@ -858,70 +861,43 @@ struct TimeHistoryChartView: View {
     }
 }
 
-/// 频谱分析图视图 - 1/1和1/3倍频程
+/// 频谱分析图视图 - 1/1倍频程
 ///
-/// 显示各频段的声压级分布，符合 IEC 61260-1 标准的倍频程分析要求
-/// 支持1/1倍频程（10个频点）和1/3倍频程（30个频点）切换显示
-/// 支持流畅的实时动画效果
-struct SpectrumAnalysisChartView: View {
+/// 显示1/1倍频程频谱数据，符合 IEC 61260-1 标准
+/// 使用柱状图显示10个标准倍频程频段
+struct SpectrumAnalysis11ChartView: View {
     @ObservedObject var viewModel: DecibelMeterViewModel
-    @State private var selectedBandType: String = "1/3"
-    @State private var chartData: SpectrumChartData?
-    @State private var animationTrigger: UUID = UUID() // 用于触发动画更新
-    
-    // MARK: - 动画配置
-    
-    /// 更新频率（帧率）
-    /// - 默认：30fps（约33毫秒），提供流畅的动画效果
-    /// - 可调整为：60fps（0.017秒）更流畅但更耗电，或24fps（0.042秒）更省电
-    private let updateInterval: TimeInterval = 0.033
-    
-    /// 动画响应时间（秒）
-    /// - 较小的值（0.15-0.2）：更快的响应，波动更频繁
-    /// - 较大的值（0.3-0.5）：更慢的响应，波动更平滑
-    private let animationResponse: Double = 0.2
-    
-    /// 动画阻尼系数（0-1）
-    /// - 接近1.0：几乎没有弹性，更平滑
-    /// - 接近0.7：有轻微弹性，更生动
-    private let animationDamping: Double = 0.8
     
     var body: some View {
         VStack(spacing: 15) {
-            // 图表标题和倍频程选择
+            // 图表标题
             HStack {
-                Text("频谱分析图")
+                Text("频谱分析图 - 1/1倍频程")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
                 Spacer()
-                
-                Picker("倍频程", selection: $selectedBandType) {
-                    Text("1/3倍频程").tag("1/3")
-                    Text("1/1倍频程").tag("1/1")
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
             }
             
-            // Swift Charts 实现 - 支持流畅动画
+            // Swift Charts 实现 - 使用柱状图显示倍频程频段
+            let chartData = getChartData()
+            
             Chart {
-                if let data = chartData {
-                    ForEach(data.dataPoints, id: \.id) { dataPoint in
-                        // 使用 BarMark，明确指定 yStart 和 yEnd 来避免尺寸警告
-                        // 对于对数坐标轴，明确指定起点和终点可以让 Swift Charts 正确计算尺寸
-                        BarMark(
-                            x: .value("频率", dataPoint.frequency),
-                            yStart: .value("基线", 0),
-                            yEnd: .value("声压级", dataPoint.magnitude)
-                        )
-                        .foregroundStyle(.green)
-                    }
+                ForEach(chartData.dataPoints, id: \.id) { dataPoint in
+                    BarMark(
+                        x: .value("频率", dataPoint.frequency),
+                        yStart: .value("基线", 0),
+                        yEnd: .value("声压级", dataPoint.magnitude)
+                    )
+                    .foregroundStyle(.orange)
                 }
             }
-            .frame(height: 200)
-            .chartXScale(domain: 20...20000, type: .log) // 对数坐标轴，范围20Hz-20kHz
-            .chartYScale(domain: 0...100) // 明确Y轴范围：0-100dB
+            .frame(height: 220)
+            .chartXScale(
+                domain: 31.5...16000,
+                type: .log
+            ) // 使用对数坐标轴
+            .chartYScale(domain: 0...120) // Y轴范围：0-120dB
             .chartXAxis {
                 AxisMarks(values: getLogAxisValues()) { value in
                     AxisGridLine()
@@ -929,8 +905,8 @@ struct SpectrumAnalysisChartView: View {
                     if let freqValue = value.as(Double.self) {
                         AxisValueLabel {
                             Text(formatFrequency(freqValue))
-                                .font(.caption)
-                            }
+                                .font(.caption2)
+                        }
                     }
                 }
             }
@@ -941,8 +917,115 @@ struct SpectrumAnalysisChartView: View {
                     if let magnitudeValue = value.as(Double.self) {
                         AxisValueLabel {
                             Text("\(Int(magnitudeValue))dB")
-                                .font(.caption)
-                            }
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 图表信息
+            HStack {
+                Text("频率范围: \(formatFrequency(chartData.frequencyRange.min)) - \(formatFrequency(chartData.frequencyRange.max))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("频段数: \(chartData.dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    // MARK: - 数据获取
+    
+    /// 获取图表数据
+    /// 
+    /// 每次视图刷新时都会调用，实现实时更新
+    private func getChartData() -> SpectrumChartData {
+        return viewModel.getSpectrumChartData(bandType: "1/1")
+    }
+    
+    private func formatFrequency(_ frequency: Double) -> String {
+        if frequency >= 1000 {
+            return "\(String(format: "%.0f", frequency/1000))k"
+        } else {
+            return "\(Int(frequency))"
+        }
+    }
+    
+    /// 生成1/1倍频程的对数坐标轴刻度值
+    private func getLogAxisValues() -> [Double] {
+        // 1/1倍频程的标准中心频率：31.5, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
+        return [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    }
+}
+
+/// 频谱分析图视图 - 1/3倍频程
+///
+/// 显示1/3倍频程频谱数据，符合 IEC 61260-1 标准
+/// 使用曲线图显示30个标准倍频程频段
+struct SpectrumAnalysis13ChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题
+            HStack {
+                Text("频谱分析图 - 1/3倍频程")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            
+            // Swift Charts 实现 - 使用线条图实现平滑的频谱曲线
+            let chartData = getChartData()
+            
+            Chart {
+                ForEach(chartData.dataPoints, id: \.id) { dataPoint in
+                    LineMark(
+                        x: .value("频率", dataPoint.frequency),
+                        y: .value("声压级", dataPoint.magnitude)
+                    )
+                    .foregroundStyle(.green)
+                    .lineStyle(StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round))
+                }
+            }
+            .frame(height: 220)
+            .chartXScale(
+                domain: 25...20000,
+                type: .log
+            ) // 使用对数坐标轴
+            .chartYScale(domain: 0...120) // Y轴范围：0-120dB
+            .chartXAxis {
+                AxisMarks(values: getLogAxisValues()) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let freqValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text(formatFrequency(freqValue))
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let magnitudeValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(magnitudeValue))dB")
+                                .font(.caption2)
+                        }
                     }
                 }
             }
@@ -952,77 +1035,44 @@ struct SpectrumAnalysisChartView: View {
             
             // 图表信息
             HStack {
-                if let data = chartData {
-                    Text("频率范围: \(formatFrequency(data.frequencyRange.min)) - \(formatFrequency(data.frequencyRange.max))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("频点数: \(data.dataPoints.count)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("加载中...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("频率范围: \(formatFrequency(chartData.frequencyRange.min)) - \(formatFrequency(chartData.frequencyRange.max))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("频段数: \(chartData.dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding()
         .background(Color.green.opacity(0.1))
         .cornerRadius(15)
-        .onAppear {
-            // 立即加载一次数据
-            updateChartData()
-        }
-        .onChange(of: selectedBandType) { _ in
-            // 当倍频程类型改变时，立即更新数据
-            updateChartData()
-        }
-        // 使用 Combine Timer 来高频率更新数据（仅在测量状态时）
-        .onReceive(Timer.publish(every: updateInterval, on: .main, in: .common).autoconnect()) { _ in
-            // 只在测量状态时更新
-            if viewModel.measurementState == .measuring {
-                updateChartData()
-            }
-        }
     }
     
-    // MARK: - 数据更新
+    // MARK: - 数据获取
     
-    /// 更新图表数据
+    /// 获取图表数据
     /// 
-    /// 高频率调用此方法（约30fps）来实现流畅的频谱动画效果
-    private func updateChartData() {
-        let newData = viewModel.getSpectrumChartData(bandType: selectedBandType)
-        
-        // 使用动画更新数据，实现流畅的过渡效果
-        withAnimation(.spring(response: animationResponse, dampingFraction: animationDamping)) {
-            chartData = newData
-            animationTrigger = UUID() // 触发动画更新
-        }
+    /// 每次视图刷新时都会调用，实现实时更新
+    private func getChartData() -> SpectrumChartData {
+        return viewModel.getSpectrumChartData(bandType: "1/3")
     }
     
     private func formatFrequency(_ frequency: Double) -> String {
         if frequency >= 1000 {
-            return "\(String(format: "%.1f", frequency/1000))k"
+            return "\(String(format: "%.0f", frequency/1000))k"
         } else {
             return "\(Int(frequency))"
         }
     }
     
-    /// 生成对数坐标轴的刻度值（适用于 20Hz-20kHz 范围）
+    /// 生成1/3倍频程的对数坐标轴刻度值
     private func getLogAxisValues() -> [Double] {
-        // 对数坐标轴的标准刻度值：20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k Hz
-        return [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
-    }
-    
-    /// 计算柱状图的相对宽度（基于倍频程类型）
-    private func getBarWidthRatio() -> CGFloat {
-        // 对于 1/1 倍频程（10个频点），使用较宽的柱子
-        // 对于 1/3 倍频程（30个频点），使用较窄的柱子
-        return selectedBandType == "1/1" ? 0.8 : 0.6
+        // 1/3倍频程的主要中心频率，用于轴标记：25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1k, 1.25k, 1.6k, 2k, 2.5k, 3.15k, 4k, 5k, 6.3k, 8k, 10k, 12.5k, 16k, 20k Hz
+        // 选择部分关键频率作为刻度显示，避免过于密集
+        return [25, 50, 100, 200, 400, 800, 1600, 3150, 6300, 12500, 20000]
     }
 }
 

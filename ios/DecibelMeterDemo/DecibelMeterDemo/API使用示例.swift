@@ -124,13 +124,13 @@ class DecibelMeterAPIExample {
         }
         
         // 3.3 频谱分析图数据
-        let spectrum1_1 = manager.getSpectrumChartData(bandType: "1/1")
+        let spectrum1_1 = manager.getSpectrumChartData()
         print("\n频谱分析图 (1/1倍频程):")
         print("标题: \(spectrum1_1.title)")
         print("频率范围: \(spectrum1_1.frequencyRange.min) - \(spectrum1_1.frequencyRange.max) Hz")
         print("数据点数量: \(spectrum1_1.dataPoints.count)")
         
-        let spectrum1_3 = manager.getSpectrumChartData(bandType: "1/3")
+        let spectrum1_3 = manager.getSpectrumChartData()
         print("\n频谱分析图 (1/3倍频程):")
         print("标题: \(spectrum1_3.title)")
         print("数据点数量: \(spectrum1_3.dataPoints.count)")
@@ -205,7 +205,7 @@ class DecibelMeterAPIExample {
         let chartData = manager.getTimeHistoryChartData(timeRange: 60.0)
         print("时间历程图数据点: \(chartData.dataPoints.count)")
         
-        let spectrum = manager.getSpectrumChartData(bandType: "1/3")
+        let spectrum = manager.getSpectrumChartData()
         print("频谱数据点: \(spectrum.dataPoints.count)")
         
         // 5.5 切换权重
@@ -268,8 +268,7 @@ extension DecibelMeterAPIExample {
         
         let allData: [String: String?] = [
             "timeHistory": manager.getTimeHistoryChartData().toJSON(),
-            "spectrum_1_1": manager.getSpectrumChartData(bandType: "1/1").toJSON(),
-            "spectrum_1_3": manager.getSpectrumChartData(bandType: "1/3").toJSON(),
+            "spectrum_1_1": manager.getSpectrumChartData().toJSON(),
             "distribution": manager.getStatisticalDistributionChartData().toJSON(),
             "leqTrend": manager.getLEQTrendChartData().toJSON(),
             "indicator": manager.getRealTimeIndicatorData().toJSON(),
