@@ -86,6 +86,9 @@ struct DecibelMeterView: View {
 
                            // 频谱分析图 - 1/3倍频程
                            SpectrumAnalysis13ChartView(viewModel: viewModel)
+
+                           // 频谱分析图 - FFT
+                           SpectrumAnalysisFFTChartView(viewModel: viewModel)
                            
                            // 统计分布图 - L10、L50、L90
                            StatisticalDistributionChartView(viewModel: viewModel)
@@ -1075,6 +1078,115 @@ struct SpectrumAnalysis13ChartView: View {
         return [25, 50, 100, 200, 400, 800, 1600, 3150, 6300, 12500, 20000]
     }
 }
+
+/// 频谱分析图视图 - FFT
+/// 
+/// 显示FFT频谱数据，符合 IEC 61260-1 标准
+/// 使用曲线图显示FFT频谱数据
+struct SpectrumAnalysisFFTChartView: View {
+    @ObservedObject var viewModel: DecibelMeterViewModel
+    
+    var body: some View {
+        VStack(spacing: 15) {
+            // 图表标题
+            HStack {
+                Text("频谱分析图 - FFT")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            
+            // Swift Charts 实现 - 使用线条图实现平滑的频谱曲线
+            let chartData = getChartData()
+            
+            Chart {
+                ForEach(chartData.dataPoints, id: \.id) { dataPoint in
+                    LineMark(
+                        x: .value("频率", dataPoint.frequency),
+                        y: .value("声压级", dataPoint.magnitude)
+                    )
+                    .foregroundStyle(.green)
+                    .lineStyle(StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round))
+                }
+            }
+            .frame(height: 220)
+            .chartXScale(
+                domain: 25...20000,
+                type: .log
+            ) // 使用对数坐标轴
+            .chartYScale(domain: 0...120) // Y轴范围：0-120dB
+            .chartXAxis {
+                AxisMarks(values: getLogAxisValues()) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let freqValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text(formatFrequency(freqValue))
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(values: .stride(by: 20)) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let magnitudeValue = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text("\(Int(magnitudeValue))dB")
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.green.opacity(0.05))
+            .cornerRadius(12)
+            
+            // 图表信息
+            HStack {
+                Text("频率范围: \(formatFrequency(chartData.frequencyRange.min)) - \(formatFrequency(chartData.frequencyRange.max))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("频段数: \(chartData.dataPoints.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.green.opacity(0.1))
+        .cornerRadius(15)
+    }
+    
+    // MARK: - 数据获取
+    
+    /// 获取图表数据
+    /// 
+    /// 每次视图刷新时都会调用，实现实时更新
+    private func getChartData() -> SpectrumChartData {
+        return viewModel.getSpectrumChartData(bandType: "FFT")
+    }
+    
+    private func formatFrequency(_ frequency: Double) -> String {
+        if frequency >= 1000 {
+            return "\(String(format: "%.0f", frequency/1000))k"
+        } else {
+            return "\(Int(frequency))"
+        }
+    }
+    
+    /// 生成1/3倍频程的对数坐标轴刻度值
+    private func getLogAxisValues() -> [Double] { 
+        // FFT频谱的主要中心频率，用于轴标记：20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k Hz
+        // 选择部分关键频率作为刻度显示，避免过于密集
+        return [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    }
+}
+
 
 /// 统计分布图视图 - L10、L50、L90
 ///

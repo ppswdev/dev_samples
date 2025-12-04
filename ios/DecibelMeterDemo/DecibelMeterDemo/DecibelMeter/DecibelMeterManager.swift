@@ -1269,10 +1269,23 @@ class DecibelMeterManager: NSObject {
             31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000
         ]
         
-        var dataPoints: [SpectrumDataPoint] = []
+        // ⭐ 修复：计算所有FFT幅度的总能量（用于计算绝对声压级）
+        let totalEnergy = fftMagnitudes.reduce(0.0) { $0 + $1 * $1 }
+        guard totalEnergy > 1e-20 else {
+            // 如果没有能量，返回空数据
+            let bandTypeName = isOneThird ? "1/3倍频程" : "1/1倍频程"
+            return SpectrumChartData(
+                dataPoints: [],
+                bandType: bandTypeName,
+                frequencyRange: (min: centerFrequencies.first ?? 20, max: centerFrequencies.last ?? 20000),
+                title: "频谱分析 - \(bandTypeName) - \(getDecibelMeterWeightingDisplayText())"
+            )
+        }
         
-        // 找到最大幅度值，用于归一化
-        let maxMagnitude = fftMagnitudes.max() ?? 1e-10
+        // ⭐ 修复：获取当前测量的总声压级（加权后的，已应用校准）
+        let totalSPL = currentMeasurement?.calibratedDecibel ?? 0.0
+        
+        var dataPoints: [SpectrumDataPoint] = []
         
         // 对每个倍频程频段计算能量
         for centerFreq in centerFrequencies {
@@ -1300,34 +1313,34 @@ class DecibelMeterManager: NSObject {
             let lowerBinIndex = max(0, Int(lowerFreq / frequencyResolution))
             let upperBinIndex = min(fftMagnitudes.count - 1, Int(upperFreq / frequencyResolution))
             
-            // 计算该频段的能量（RMS 值）
-            var energySum: Double = 0.0
-            var binCount = 0
+            // ⭐ 修复：计算该频段的总能量（不是RMS）
+            var bandEnergySum: Double = 0.0
             
             for binIndex in lowerBinIndex...upperBinIndex {
                 let magnitude = fftMagnitudes[binIndex]
-                energySum += magnitude * magnitude  // 能量 = 幅度^2
-                binCount += 1
+                bandEnergySum += magnitude * magnitude  // 能量 = 幅度^2
             }
             
-            // 计算 RMS 值（均方根）
-            let rmsMagnitude = binCount > 0 ? sqrt(energySum / Double(binCount)) : 0.0
+            guard bandEnergySum > 1e-20 else {
+                // 能量太小，跳过
+                continue
+            }
             
-            // 归一化幅度
-            let normalizedMagnitude = maxMagnitude > 1e-10 ? (rmsMagnitude / maxMagnitude) : 0.0
+            // ⭐ 修复：基于能量比例计算绝对声压级
+            // 计算该频段的能量比例
+            let energyRatio = bandEnergySum / totalEnergy
             
-            // 转换为 dB
-            let epsilon = 1e-6
-            let safeMagnitude = max(normalizedMagnitude, epsilon)
-            let rawDb = 20.0 * log10(safeMagnitude)
-            var magnitudeDb = rawDb + 120.0
+            // ⭐ 修复：根据能量比例和总声压级，计算该频段的绝对声压级
+            // 能量比例转换为dB：10 * log10(energyRatio)
+            // 然后加到总声压级上：totalSPL + 10 * log10(energyRatio)
+            var magnitudeDb = totalSPL + 10.0 * log10(max(energyRatio, 1e-10))
             
-            // 应用频率权重
+            // 应用频率权重补偿
             let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: centerFreq) ?? 0.0
             magnitudeDb += weightCompensation
             
-            // 限制范围
-            let clampedMagnitude = max(0, min(120, magnitudeDb))
+            // 限制范围（合理的声压级范围：0-140 dB）
+            let clampedMagnitude = max(0, min(140, magnitudeDb))
             
             dataPoints.append(SpectrumDataPoint(
                 frequency: centerFreq,
@@ -1358,8 +1371,20 @@ class DecibelMeterManager: NSObject {
         let maxDisplayPoints = 800  // 最多显示 800 个点，保证流畅度和细节
         let downsampleFactor = max(1, totalBins / maxDisplayPoints)
         
-        // 找到最大幅度值，用于归一化
-        let maxMagnitude = fftMagnitudes.max() ?? 1e-10
+        // ⭐ 修复：计算所有FFT幅度的总能量（用于计算绝对声压级）
+        let totalEnergy = fftMagnitudes.reduce(0.0) { $0 + $1 * $1 }
+        guard totalEnergy > 1e-20 else {
+            // 如果没有能量，返回空数据
+            return SpectrumChartData(
+                dataPoints: [],
+                bandType: "FFT频谱",
+                frequencyRange: (min: minFreq, max: maxFreq),
+                title: "FFT频谱分析 - \(getDecibelMeterWeightingDisplayText())"
+            )
+        }
+        
+        // ⭐ 修复：获取当前测量的总声压级（加权后的，已应用校准）
+        let totalSPL = currentMeasurement?.calibratedDecibel ?? 0.0
         
         var dataPoints: [SpectrumDataPoint] = []
         
@@ -1370,21 +1395,27 @@ class DecibelMeterManager: NSObject {
             // 获取该 bin 的幅度
             let magnitude = fftMagnitudes[binIndex]
             
-            // 归一化幅度
-            let normalizedMagnitude = maxMagnitude > 1e-10 ? (magnitude / maxMagnitude) : 0.0
+            // ⭐ 修复：基于能量比例计算绝对声压级
+            let binEnergy = magnitude * magnitude
+            guard binEnergy > 1e-20 else {
+                // 能量太小，跳过
+                continue
+            }
             
-            // 转换为 dB
-            let epsilon = 1e-6
-            let safeMagnitude = max(normalizedMagnitude, epsilon)
-            let rawDb = 20.0 * log10(safeMagnitude)
-            var magnitudeDb = rawDb + 120.0
+            // 计算能量比例
+            let energyRatio = binEnergy / totalEnergy
             
-            // 应用频率权重
+            // ⭐ 修复：根据能量比例和总声压级，计算该频率的绝对声压级
+            // 能量比例转换为dB：10 * log10(energyRatio)
+            // 然后加到总声压级上：totalSPL + 10 * log10(energyRatio)
+            var magnitudeDb = totalSPL + 10.0 * log10(max(energyRatio, 1e-10))
+            
+            // 应用频率权重补偿
             let weightCompensation = frequencyWeightingFilter?.getWeightingdB(decibelMeterFrequencyWeighting, frequency: frequency) ?? 0.0
             magnitudeDb += weightCompensation
             
-            // 限制范围
-            let clampedMagnitude = max(0, min(120, magnitudeDb))
+            // 限制范围（合理的声压级范围：0-140 dB）
+            let clampedMagnitude = max(0, min(140, magnitudeDb))
             
             dataPoints.append(SpectrumDataPoint(
                 frequency: frequency,
