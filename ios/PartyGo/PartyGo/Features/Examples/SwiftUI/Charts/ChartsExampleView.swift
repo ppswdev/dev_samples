@@ -42,146 +42,8 @@ struct ChartsExampleView: View {
     
     let months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"]
     
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 30) {
-                    Text("SwiftUI Charts 示例")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .padding()
-                    
-                    // 1. 饼图示例
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("饼图示例")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Chart(pieChartData) {
-                            SectorMark(
-                                angle: .value("数值", $0.value),
-                                innerRadius: .ratio(0.5),
-                                outerRadius: .ratio(0.8),
-                                cornerRadius: 5,
-                                angularInset: 1
-                            )
-                            .foregroundStyle($0.color)
-                            .annotation(position: .overlay) {
-                                if $0.value > 20 {
-                                    Text("\(Int($0.value))%")
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                }
-                            }
-                        }
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(height: 250)
-                        
-                        // 图例
-                        HStack(spacing: 10) {
-                            ForEach(pieChartData) {
-                                HStack {
-                                    Circle()
-                                        .fill($0.color)
-                                        .frame(width: 12, height: 12)
-                                    Text($0.name)
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                    
-                    // 2. 柱状图示例
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("柱状图示例")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Chart(barChartData) {
-                            BarMark(
-                                x: .value("名称", $0.name),
-                                y: .value("数值", $0.value)
-                            )
-                            .foregroundStyle($0.color)
-                            .cornerRadius(4)
-                        }
-                        .frame(height: 300)
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                    
-                   // 3. 折线图示例
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("折线图示例")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        // 修复：将复杂的折线图表达式分解为更简单的结构
-                        Chart {
-                            // 预处理数据，创建更简单的数据结构
-                            ForEach(preprocessedLineData(), id: \.id) { item in
-                                LineMark(
-                                    x: .value("月份", item.month),
-                                    y: .value(item.type, item.value)
-                                )
-                                .foregroundStyle(item.color)
-                                .symbol(by: .value("类型", item.type))
-                            }
-                        }
-                        .frame(height: 300)
-                        .chartXAxis {
-                            AxisMarks(values: .stride(by: 2))
-                        }
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                    
-                    // 4. 组合图表示例
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("组合图表示例")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Chart {
-                            // 柱状图部分
-                            ForEach(barChartData) {
-                                BarMark(
-                                    x: .value("名称", $0.name),
-                                    y: .value("数值", $0.value)
-                                )
-                                .foregroundStyle($0.color.opacity(0.6))
-                            }
-                            
-                            // 折线图部分
-                            ForEach(barChartData) {
-                                LineMark(
-                                    x: .value("名称", $0.name),
-                                    y: .value("数值", $0.value * 1.2)
-                                )
-                                .foregroundStyle(Color.black)
-                                .symbolSize(10)
-                            }
-                        }
-                        .frame(height: 300)
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                .padding()
-            }
-            .navigationTitle("Charts 示例")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    // 在ChartsExampleView结构体内部添加
-    private func preprocessedLineData() -> [LineDataPoint] {
+    // 预处理折线图数据（计算属性，避免在闭包中计算）
+    private var processedLineData: [LineDataPoint] {
         let colors: [Color] = [.red, .blue, .green]
         var result = [LineDataPoint]()
         
@@ -204,15 +66,182 @@ struct ChartsExampleView: View {
         
         return result
     }
-
-    // 添加一个新的辅助结构体
-    private struct LineDataPoint: Identifiable {
-        let id: UUID
-        let month: String
-        let value: Double
-        let type: String
-        let color: Color
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 30) {
+                    titleView
+                    pieChartSection
+                    barChartSection
+                    lineChartSection
+                    combinedChartSection
+                }
+                .padding()
+            }
+            .navigationTitle("Charts 示例")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
+    
+    // MARK: - 子视图
+    
+    private var titleView: some View {
+        Text("SwiftUI Charts 示例")
+            .font(.largeTitle)
+            .fontWeight(.bold)
+            .padding()
+    }
+    
+    private var pieChartSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("饼图示例")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            pieChart
+            
+            pieChartLegend
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var pieChart: some View {
+        Chart(pieChartData) { data in
+            SectorMark(
+                angle: .value("数值", data.value),
+                innerRadius: .ratio(0.5),
+                outerRadius: .ratio(0.8),
+                angularInset: 1
+            )
+            .foregroundStyle(data.color)
+            .annotation(position: .overlay) {
+                if data.value > 20 {
+                    Text("\(Int(data.value))%")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(height: 250)
+    }
+    
+    private var pieChartLegend: some View {
+        HStack(spacing: 10) {
+            ForEach(pieChartData) { data in
+                HStack {
+                    Circle()
+                        .fill(data.color)
+                        .frame(width: 12, height: 12)
+                    Text(data.name)
+                        .font(.caption)
+                }
+            }
+        }
+    }
+    
+    private var barChartSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("柱状图示例")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            barChart
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var barChart: some View {
+        Chart(barChartData) { data in
+            BarMark(
+                x: .value("名称", data.name),
+                y: .value("数值", data.value)
+            )
+            .foregroundStyle(data.color)
+            .cornerRadius(4)
+        }
+        .frame(height: 300)
+    }
+    
+    private var lineChartSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("折线图示例")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            lineChart
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var lineChart: some View {
+        Chart {
+            ForEach(processedLineData) { item in
+                LineMark(
+                    x: .value("月份", item.month),
+                    y: .value(item.type, item.value)
+                )
+                .foregroundStyle(item.color)
+                .symbol(by: .value("类型", item.type))
+            }
+        }
+        .frame(height: 300)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: 2))
+        }
+    }
+    
+    private var combinedChartSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("组合图表示例")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            combinedChart
+        }
+        .padding()
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private var combinedChart: some View {
+        Chart {
+            ForEach(barChartData) { data in
+                BarMark(
+                    x: .value("名称", data.name),
+                    y: .value("数值", data.value)
+                )
+                .foregroundStyle(data.color.opacity(0.6))
+            }
+            
+            ForEach(barChartData) { data in
+                LineMark(
+                    x: .value("名称", data.name),
+                    y: .value("数值", data.value * 1.2)
+                )
+                .foregroundStyle(Color.black)
+                .symbolSize(10)
+            }
+        }
+        .frame(height: 300)
+    }
+}
+
+// MARK: - 辅助结构体
+
+private struct LineDataPoint: Identifiable {
+    let id: UUID
+    let month: String
+    let value: Double
+    let type: String
+    let color: Color
 }
 
 #Preview {
