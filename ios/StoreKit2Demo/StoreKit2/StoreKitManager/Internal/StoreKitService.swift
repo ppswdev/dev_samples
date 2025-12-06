@@ -37,7 +37,12 @@ internal class StoreKitService: ObservableObject {
     // 当前状态
     private var currentState: StoreKitState = .idle {
         didSet {
-            delegate?.service(self, didUpdateState: currentState)
+            // 确保在主线程调用 delegate
+            let state = currentState
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                await self.notifyStateChanged(state)
+            }
         }
     }
     
@@ -96,7 +101,9 @@ internal class StoreKitService: ObservableObject {
             
             self.allProducts = products
             currentState = .productsLoaded(products)
-            delegate?.service(self, didLoadProducts: products)
+            // delegate 会在 didSet 中通过 notifyStateChanged 调用
+            // 这里直接调用 didLoadProducts
+            await notifyProductsLoaded(products)
             
         } catch {
             currentState = .error(error)
@@ -158,12 +165,14 @@ internal class StoreKitService: ObservableObject {
         
         self.purchasedProducts = purchased
         currentState = .purchasesLoaded
-        delegate?.service(self, didUpdatePurchasedProducts: purchased)
+        // delegate 会在 didSet 中通过 notifyStateChanged 调用
+        // 这里直接调用 didUpdatePurchasedProducts
+        await notifyPurchasedProductsUpdated(purchased)
         
         // 更新订阅状态
         if let firstAutoRenewable = allProducts.first(where: { $0.type == .autoRenewable }) {
             subscriptionStatus = try? await firstAutoRenewable.subscription?.status.first?.state
-            delegate?.service(self, didUpdateSubscriptionStatus: subscriptionStatus)
+            await notifySubscriptionStatusChanged(subscriptionStatus)
         }
     }
     
@@ -199,7 +208,9 @@ internal class StoreKitService: ObservableObject {
     
     /// 执行购买
     private func performPurchase(_ product: Product, continuation: CheckedContinuation<Void, Error>) async {
-        currentState = .purchasing(product.id)
+        await MainActor.run {
+            currentState = .purchasing(product.id)
+        }
         
         do {
             let result = try await product.purchase()
@@ -221,28 +232,40 @@ internal class StoreKitService: ObservableObject {
                         await transaction.finish()
                     }
                     
-                    currentState = .purchaseSuccess(transaction.productID)
+                    await MainActor.run {
+                        currentState = .purchaseSuccess(transaction.productID)
+                    }
                     continuation.resume()
                 } catch {
-                    currentState = .purchaseFailed(product.id, error)
+                    await MainActor.run {
+                        currentState = .purchaseFailed(product.id, error)
+                    }
                     continuation.resume(throwing: error)
                 }
                 
             case .pending:
-                currentState = .purchasePending(product.id)
+                await MainActor.run {
+                    currentState = .purchasePending(product.id)
+                }
                 continuation.resume()
                 
             case .userCancelled:
-                currentState = .purchaseCancelled(product.id)
+                await MainActor.run {
+                    currentState = .purchaseCancelled(product.id)
+                }
                 continuation.resume()
                 
             @unknown default:
                 let error = StoreKitError.unknownError
-                currentState = .purchaseFailed(product.id, error)
+                await MainActor.run {
+                    currentState = .purchaseFailed(product.id, error)
+                }
                 continuation.resume(throwing: error)
             }
         } catch {
-            currentState = .purchaseFailed(product.id, error)
+            await MainActor.run {
+                currentState = .purchaseFailed(product.id, error)
+            }
             continuation.resume(throwing: error)
         }
     }
@@ -319,7 +342,7 @@ internal class StoreKitService: ObservableObject {
         return await SubscriptionInfo.from(product)
     }
     
-    /// 打开订阅管理页面
+    /// 打开订阅管理页面（使用 URL）
     @MainActor
     func openSubscriptionManagement() {
         guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else { return }
@@ -333,15 +356,87 @@ internal class StoreKitService: ObservableObject {
         #endif
     }
     
-    /// 取消订阅（打开系统设置）
+    /// 显示应用内订阅管理界面（iOS 15.0+）
+    /// - Returns: 是否成功显示（如果系统不支持则返回 false）
     @MainActor
-    func cancelSubscription(for productId: String) {
-        // 在 iOS 上，取消订阅需要通过系统设置
-        // 这里打开订阅管理页面
+    func showManageSubscriptionsSheet() async -> Bool {
+        #if os(iOS)
+        if #available(iOS 15.0, *) {
+            do {
+                try await AppStore.showManageSubscriptions(in: await UIApplication.shared.connectedScenes.first as? UIWindowScene ?? UIApplication.shared.windows.first?.windowScene)
+                return true
+            } catch {
+                print("显示订阅管理界面失败: \(error)")
+                // 如果失败，回退到打开 URL
+                openSubscriptionManagement()
+                return false
+            }
+        } else {
+            // iOS 15.0 以下使用 URL
+            openSubscriptionManagement()
+            return false
+        }
+        #elseif os(macOS)
+        if #available(macOS 12.0, *) {
+            do {
+                try await AppStore.showManageSubscriptions()
+                return true
+            } catch {
+                print("显示订阅管理界面失败: \(error)")
+                openSubscriptionManagement()
+                return false
+            }
+        } else {
+            openSubscriptionManagement()
+            return false
+        }
+        #else
         openSubscriptionManagement()
+        return false
+        #endif
+    }
+    
+    /// 取消订阅（显示应用内订阅管理界面）
+    /// - Parameter productId: 产品ID（可选，如果提供则直接定位到该订阅）
+    /// - Returns: 是否成功显示管理界面
+    @MainActor
+    func cancelSubscription(for productId: String? = nil) async -> Bool {
+        // 优先使用应用内订阅管理界面
+        let success = await showManageSubscriptionsSheet()
+        
+        if !success {
+            // 如果应用内界面不可用，则打开 URL
+            openSubscriptionManagement()
+        }
+        
+        return success
     }
     
     // MARK: - 私有方法
+    
+    /// 通知状态变化（在主线程执行）
+    @MainActor
+    private func notifyStateChanged(_ state: StoreKitState) {
+        delegate?.service(self, didUpdateState: state)
+    }
+    
+    /// 通知产品加载（在主线程执行）
+    @MainActor
+    private func notifyProductsLoaded(_ products: [Product]) {
+        delegate?.service(self, didLoadProducts: products)
+    }
+    
+    /// 通知已购买产品更新（在主线程执行）
+    @MainActor
+    private func notifyPurchasedProductsUpdated(_ products: [Product]) {
+        delegate?.service(self, didUpdatePurchasedProducts: products)
+    }
+    
+    /// 通知订阅状态变化（在主线程执行）
+    @MainActor
+    private func notifySubscriptionStatusChanged(_ status: Product.SubscriptionInfo.RenewalState?) {
+        delegate?.service(self, didUpdateSubscriptionStatus: status)
+    }
     
     /// 设置订阅者
     private func setupSubscribers() {
@@ -350,7 +445,9 @@ internal class StoreKitService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] products in
                 guard let self = self else { return }
-                self.delegate?.service(self, didLoadProducts: products)
+                Task { @MainActor in
+                    await self.notifyProductsLoaded(products)
+                }
             }
             .store(in: &cancellables)
         
@@ -359,7 +456,9 @@ internal class StoreKitService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] products in
                 guard let self = self else { return }
-                self.delegate?.service(self, didUpdatePurchasedProducts: products)
+                Task { @MainActor in
+                    await self.notifyPurchasedProductsUpdated(products)
+                }
             }
             .store(in: &cancellables)
         
@@ -368,7 +467,9 @@ internal class StoreKitService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 guard let self = self else { return }
-                self.delegate?.service(self, didUpdateSubscriptionStatus: status)
+                Task { @MainActor in
+                    await self.notifySubscriptionStatusChanged(status)
+                }
             }
             .store(in: &cancellables)
     }

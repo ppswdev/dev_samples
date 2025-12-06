@@ -69,39 +69,38 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             
         case .purchasesLoaded:
             isLoading = false
-            print("✅ 已购买产品加载完成")
+            print("✅ 已购买产品加载完成, 共 \(purchasedProducts.count) 个")
             
         case .purchasing(let productId):
             isLoading = true
-            showAlert(message: "正在购买: \(productId)")
+            print("正在购买: \(productId)")
             
         case .purchaseSuccess(let productId):
             isLoading = false
-            showAlert(message: "✅ 购买成功: \(productId)")
+            print("✅ 购买成功: \(productId)")
             Task {
                 await refreshPurchases()
             }
-            
         case .purchasePending(let productId):
             isLoading = false
-            showAlert(message: "⏳ 购买待处理: \(productId)")
+            print("⏳ 购买待处理: \(productId)")
             
         case .purchaseCancelled(let productId):
             isLoading = false
-            showAlert(message: "❌ 用户取消购买: \(productId)")
+            print("❌ 用户取消购买: \(productId)")
             
         case .purchaseFailed(let productId, let error):
             isLoading = false
             errorMessage = "购买失败: \(productId)\n\(error.localizedDescription)"
-            showAlert(message: "❌ 购买失败: \(error.localizedDescription)")
+            print("❌ 购买失败: \(error.localizedDescription)")
             
         case .restoringPurchases:
             isLoading = true
-            showAlert(message: "正在恢复购买...")
+            print("正在恢复购买...")
             
         case .restorePurchasesSuccess:
             isLoading = false
-            showAlert(message: "✅ 恢复购买成功")
+            print("✅ 恢复购买成功")
             Task {
                 await refreshPurchases()
             }
@@ -109,22 +108,22 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         case .restorePurchasesFailed(let error):
             isLoading = false
             errorMessage = "恢复购买失败: \(error.localizedDescription)"
-            showAlert(message: "❌ 恢复购买失败: \(error.localizedDescription)")
+            print("❌ 恢复购买失败: \(error.localizedDescription)")
             
         case .purchaseRefunded(let productId):
-            showAlert(message: "⚠️ 购买已退款: \(productId)")
+            print("⚠️ 购买已退款: \(productId)")
             Task {
                 await refreshPurchases()
             }
             
         case .purchaseRevoked(let productId):
-            showAlert(message: "⚠️ 购买已撤销: \(productId)")
+            print("⚠️ 购买已撤销: \(productId)")
             Task {
                 await refreshPurchases()
             }
             
         case .subscriptionCancelled(let productId):
-            showAlert(message: "⚠️ 订阅已取消: \(productId)")
+            print("⚠️ 订阅已取消: \(productId)")
             Task {
                 await refreshPurchases()
             }
@@ -139,7 +138,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         case .error(let error):
             isLoading = false
             errorMessage = error.localizedDescription
-            showAlert(message: "❌ 发生错误: \(error.localizedDescription)")
+            print("❌ 发生错误: \(error.localizedDescription)")
             
         default:
             break
@@ -169,7 +168,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
                 try await StoreKitManager.shared.purchase(product)
             } catch {
                 errorMessage = error.localizedDescription
-                showAlert(message: "购买失败: \(error.localizedDescription)")
+                print("❌ 购买失败: \(error.localizedDescription)")
             }
         }
     }
@@ -180,7 +179,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             do {
                 try await StoreKitManager.shared.restorePurchases()
             } catch {
-                errorMessage = error.localizedDescription
+                print("❌ 恢复购买失败: \(error.localizedDescription)")
             }
         }
     }
@@ -216,10 +215,6 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     // MARK: - 辅助方法
     
-    private func showAlert(message: String) {
-        alertMessage = message
-        showAlert = true
-    }
     
     /// 按类型获取产品
     var nonConsumables: [Product] {

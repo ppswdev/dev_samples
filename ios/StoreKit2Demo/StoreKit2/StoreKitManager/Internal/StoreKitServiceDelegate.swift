@@ -9,6 +9,8 @@ import Foundation
 import StoreKit
 
 /// StoreKitService 内部代理协议
+/// 所有回调都在主线程执行
+@MainActor
 internal protocol StoreKitServiceDelegate: AnyObject {
     /// 状态更新
     func service(_ service: StoreKitService, didUpdateState state: StoreKitState)

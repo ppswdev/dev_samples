@@ -204,17 +204,25 @@ public class StoreKitManager {
         await service?.getSubscriptionInfo(for: productId)
     }
     
-    /// 打开订阅管理页面（系统设置）
+    /// 打开订阅管理页面（使用 URL）
     @MainActor
     public func openSubscriptionManagement() {
         service?.openSubscriptionManagement()
     }
     
-    /// 取消订阅（打开系统设置页面）
-    /// - Parameter productId: 产品ID
+    /// 显示应用内订阅管理界面（iOS 15.0+ / macOS 12.0+）
+    /// - Returns: 是否成功显示管理界面
     @MainActor
-    public func cancelSubscription(for productId: String) {
-        service?.cancelSubscription(for: productId)
+    public func showManageSubscriptionsSheet() async -> Bool {
+        await service?.showManageSubscriptionsSheet() ?? false
+    }
+    
+    /// 取消订阅（显示应用内订阅管理界面）
+    /// - Parameter productId: 产品ID（可选，如果提供则直接定位到该订阅）
+    /// - Returns: 是否成功显示管理界面
+    @MainActor
+    public func cancelSubscription(for productId: String? = nil) async -> Bool {
+        await service?.cancelSubscription(for: productId) ?? false
     }
     
     // MARK: - 控制方法
@@ -235,6 +243,7 @@ public class StoreKitManager {
 // MARK: - StoreKitServiceDelegate
 
 extension StoreKitManager: StoreKitServiceDelegate {
+    @MainActor
     func service(_ service: StoreKitService, didUpdateState state: StoreKitState) {
         currentState = state
         
@@ -245,6 +254,7 @@ extension StoreKitManager: StoreKitServiceDelegate {
         onStateChanged?(state)
     }
     
+    @MainActor
     func service(_ service: StoreKitService, didLoadProducts products: [Product]) {
         allProducts = products
         
@@ -255,6 +265,7 @@ extension StoreKitManager: StoreKitServiceDelegate {
         onProductsLoaded?(products)
     }
     
+    @MainActor
     func service(_ service: StoreKitService, didUpdatePurchasedProducts products: [Product]) {
         purchasedProducts = products
         
@@ -265,6 +276,7 @@ extension StoreKitManager: StoreKitServiceDelegate {
         onPurchasedProductsUpdated?(products)
     }
     
+    @MainActor
     func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: RenewalState?) {
         subscriptionStatus = status
         
