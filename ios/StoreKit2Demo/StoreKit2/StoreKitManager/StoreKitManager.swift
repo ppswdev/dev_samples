@@ -8,6 +8,9 @@
 import Foundation
 import StoreKit
 
+public typealias SubscriptionInfo = Product.SubscriptionInfo
+public typealias SubscriptionStatus = Product.SubscriptionInfo.Status
+
 /// 交易类型别名
 public typealias Transaction = StoreKit.Transaction
 
@@ -225,6 +228,13 @@ public class StoreKitManager {
         await service?.cancelSubscription(for: productId) ?? false
     }
     
+    /// 刷新订阅状态（同步最新的订阅信息）
+    /// 在用户取消订阅后调用此方法可以获取最新的订阅状态
+    @MainActor
+    public func refreshSubscriptionStatus() async {
+        await service?.refreshSubscriptionStatus()
+    }
+    
     // MARK: - 控制方法
     
     /// 停止服务（释放资源）
@@ -279,6 +289,22 @@ extension StoreKitManager: StoreKitServiceDelegate {
     @MainActor
     func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: RenewalState?) {
         subscriptionStatus = status
+
+        // 打印订阅状态
+        switch status {
+        case .subscribed:
+            print("当前订阅状态：已订阅")
+        case .expired:
+            print("当前订阅状态：已过期")
+        case .revoked:
+            print("当前订阅状态：已撤销")
+        case .inBillingRetryPeriod:
+            print("当前订阅状态：在计费重试期")
+        case .inGracePeriod:
+            print("当前订阅状态：在宽限期")
+        default:
+            print("当前订阅状态：未知")
+        }
         
         // 通知代理
         delegate?.storeKit(self, didUpdateSubscriptionStatus: status)

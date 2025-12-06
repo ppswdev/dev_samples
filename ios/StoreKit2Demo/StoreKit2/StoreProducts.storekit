@@ -77,16 +77,27 @@
       },
       {
         "current" : {
-          "index" : 1,
-          "type" : "purchase"
+          "index" : 3,
+          "type" : "generic"
         },
         "enabled" : false,
         "name" : "Purchase"
       },
       {
-        "current" : null,
+        "current" : {
+          "index" : 0,
+          "type" : "verification"
+        },
         "enabled" : false,
         "name" : "Verification"
+      },
+      {
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
+        "enabled" : false,
+        "name" : "App Store Sync"
       },
       {
         "current" : {
@@ -94,25 +105,29 @@
           "type" : "generic"
         },
         "enabled" : false,
-        "name" : "App Store Sync"
-      },
-      {
-        "current" : null,
-        "enabled" : false,
         "name" : "Subscription Status"
       },
       {
-        "current" : null,
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
         "enabled" : false,
         "name" : "App Transaction"
       },
       {
-        "current" : null,
+        "current" : {
+          "index" : 3,
+          "type" : "generic"
+        },
         "enabled" : false,
         "name" : "Manage Subscriptions Sheet"
       },
       {
-        "current" : null,
+        "current" : {
+          "index" : 0,
+          "type" : "refund request"
+        },
         "enabled" : false,
         "name" : "Refund Request Sheet"
       },
@@ -142,70 +157,6 @@
           "displayPrice" : "9.99",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "BA710611",
-          "introductoryOffer" : {
-            "internalID" : "D930C428",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "Weekly VIP of Guide",
-              "displayName" : "Weekly VIP Guide",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.ppswdev.store.onboarding.weeklyvip",
-          "recurringSubscriptionPeriod" : "P1W",
-          "referenceName" : "Weekly VIP of Guide",
-          "subscriptionGroupID" : "732E29F2",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "6.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "2A2AAFFF",
-          "introductoryOffer" : {
-            "internalID" : "1EBD86AF",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "Weekly VIP of Detainment",
-              "displayName" : "Weekly VIP WL",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.ppswdev.store.detainment.weeklyvip",
-          "recurringSubscriptionPeriod" : "P1W",
-          "referenceName" : "Weekly VIP of Detainment",
-          "subscriptionGroupID" : "732E29F2",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "9.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
           "internalID" : "D7180163",
           "introductoryOffer" : {
             "displayPrice" : "0.99",
@@ -223,38 +174,6 @@
           "productID" : "com.ppswdev.store.inapp.weeklyvip",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly VIP of InApp",
-          "subscriptionGroupID" : "732E29F2",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "4.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "98A6BB00",
-          "introductoryOffer" : {
-            "internalID" : "230CDF4E",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "Weekly Vip of in app WL",
-              "displayName" : "Weekly VIP InApp WL",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.ppswdev.store.inapp.weeklyvip.wl",
-          "recurringSubscriptionPeriod" : "P1W",
-          "referenceName" : "Weekly VIP of InApp Detainment",
           "subscriptionGroupID" : "732E29F2",
           "type" : "RecurringSubscription",
           "winbackOffers" : [

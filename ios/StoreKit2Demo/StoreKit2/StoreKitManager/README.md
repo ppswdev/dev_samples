@@ -196,11 +196,58 @@ Task {
 ### 9. 订阅管理
 
 ```swift
-// 打开订阅管理页面（系统设置）
+// 方式1: 显示应用内订阅管理界面（推荐，iOS 15.0+ / macOS 12.0+）
+// 注意：界面关闭后会自动刷新订阅状态
+Task {
+    let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
+    if !success {
+        // 如果应用内界面不可用，回退到 URL 方式
+        StoreKitManager.shared.openSubscriptionManagement()
+    }
+}
+
+// 方式2: 打开订阅管理页面（使用 URL，兼容所有版本）
 StoreKitManager.shared.openSubscriptionManagement()
 
-// 取消订阅（打开系统设置）
-StoreKitManager.shared.cancelSubscription(for: "subscription.monthly")
+// 方式3: 取消订阅（显示应用内订阅管理界面）
+// 注意：界面关闭后会自动刷新订阅状态
+Task {
+    await StoreKitManager.shared.cancelSubscription(for: "subscription.monthly")
+}
+
+// 方式4: 手动刷新订阅状态（获取最新状态）
+// 在用户取消订阅后，可以调用此方法获取最新的订阅状态
+Task {
+    await StoreKitManager.shared.refreshSubscriptionStatus()
+}
+```
+
+#### 获取最新订阅状态
+
+当用户取消订阅后，有几种方式获取最新的订阅状态：
+
+1. **自动刷新**：使用 `showManageSubscriptionsSheet()` 或 `cancelSubscription()` 时，界面关闭后会自动刷新订阅状态。
+
+2. **手动刷新**：调用 `refreshSubscriptionStatus()` 方法手动刷新：
+
+```swift
+Task {
+    await StoreKitManager.shared.refreshSubscriptionStatus()
+}
+```
+
+3. **实时监听**：通过 `StoreKitDelegate` 的 `storeKit(_:didUpdateSubscriptionStatus:)` 方法实时监听订阅状态变化。
+
+4. **查询订阅信息**：使用 `getSubscriptionInfo(for:)` 方法查询特定订阅的详细信息：
+
+```swift
+Task {
+    if let info = await StoreKitManager.shared.getSubscriptionInfo(for: "subscription.monthly") {
+        print("订阅状态: \(info.renewalState)")
+        print("是否已取消: \(info.isCancelled)")
+        print("过期日期: \(info.expirationDate)")
+    }
+}
 ```
 
 ### 10. 手动刷新
@@ -415,6 +462,16 @@ StoreKitManager.shared.configure(with: config, delegate: self)
 // 停止服务（释放资源）
 StoreKitManager.shared.stop()
 ```
+
+## 官方文档
+
+官方App内购买项目文档StoreKit 2.0
+
+<https://developer.apple.com/cn/in-app-purchase/>
+
+<https://developer.apple.com/documentation/storekit/in-app-purchase>
+
+<https://developer.apple.com/documentation/storekit/implementing-a-store-in-your-app-using-the-storekit-api>
 
 ## 许可证
 

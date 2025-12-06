@@ -55,6 +55,7 @@ struct StoreExampleView: View {
                     Section("自动续订订阅") {
                         ForEach(viewModel.autoRenewables, id: \.id) { product in
                             SubscriptionProductRow(
+                                viewModel: viewModel,
                                 product: product,
                                 isPurchased: viewModel.isPurchased(product),
                                 onPurchase: { viewModel.purchase(product) },
@@ -76,7 +77,24 @@ struct StoreExampleView: View {
                         }
                     }
                     
-                    Button("打开订阅管理") {
+                    Button("应用内订阅管理") {
+                        Task {
+                            let success = await viewModel.showManageSubscriptionsSheet()
+                            if !success {
+                                // 如果应用内界面不可用，使用 URL
+                                viewModel.openSubscriptionManagement()
+                            }
+                            // 注意：showManageSubscriptionsSheet 内部已自动刷新状态
+                        }
+                    }
+                    
+                    Button("刷新订阅状态") {
+                        Task {
+                            await viewModel.refreshSubscriptionStatus()
+                        }
+                    }
+                    
+                    Button("打开订阅管理（URL）") {
                         viewModel.openSubscriptionManagement()
                     }
                     
@@ -142,6 +160,7 @@ struct ProductRow: View {
 // MARK: - 订阅产品行视图
 
 struct SubscriptionProductRow: View {
+    @ObservedObject var viewModel: StoreExampleViewModel
     let product: Product
     let isPurchased: Bool
     let onPurchase: () -> Void
@@ -172,22 +191,31 @@ struct SubscriptionProductRow: View {
                 Spacer()
                 
                 if isPurchased {
-                    VStack {
+                    VStack(spacing: 4) {
                         Label("已订阅", systemImage: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.caption)
                         
-                        if let info = subscriptionInfo, info.productId == product.id {
-                            if info.isValid {
-                                Text("有效")
-                                    .font(.caption2)
-                                    .foregroundColor(.green)
-                            } else if info.isExpired {
-                                Text("已过期")
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
+//                        if let info = subscriptionInfo, info.productId == product.id {
+//                            if info.isValid {
+//                                Text("有效")
+//                                    .font(.caption2)
+//                                    .foregroundColor(.green)
+//                            } else if info.isExpired {
+//                                Text("已过期")
+//                                    .font(.caption2)
+//                                    .foregroundColor(.red)
+//                            }
+//                        }
+                        
+                        // 管理订阅按钮
+                        Button("管理订阅") {
+                            Task {
+                                await viewModel.cancelSubscription(for: product.id)
                             }
                         }
+                        .buttonStyle(.bordered)
+                        .font(.caption2)
                     }
                 } else {
                     Button("订阅") {
@@ -198,9 +226,9 @@ struct SubscriptionProductRow: View {
             }
             
             // 显示订阅详细信息
-            if let info = subscriptionInfo, info.productId == product.id {
-                SubscriptionInfoView(info: info)
-            }
+//            if let info = subscriptionInfo, info.productId == product.id {
+//                SubscriptionInfoView(info: info)
+//            }
         }
         .padding(.vertical, 4)
     }
@@ -239,28 +267,28 @@ struct SubscriptionInfoView: View {
         VStack(alignment: .leading, spacing: 4) {
             Divider()
             
-            if let renewalDate = info.renewalDate {
-                Text("续订日期: \(renewalDate, style: .date)")
-                    .font(.caption)
-            }
-            
-            if info.isInTrialPeriod {
-                Text("试用期")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
-            
-            if info.isInIntroductoryPricePeriod {
-                Text("优惠价格期")
-                    .font(.caption)
-                    .foregroundColor(.blue)
-            }
-            
-            if info.isCancelled {
-                Text("已取消（仍在有效期内）")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
+//            if let renewalDate = info.renewalDate {
+//                Text("续订日期: \(renewalDate, style: .date)")
+//                    .font(.caption)
+//            }
+//            
+//            if info.isInTrialPeriod {
+//                Text("试用期")
+//                    .font(.caption)
+//                    .foregroundColor(.orange)
+//            }
+//            
+//            if info.isInIntroductoryPricePeriod {
+//                Text("优惠价格期")
+//                    .font(.caption)
+//                    .foregroundColor(.blue)
+//            }
+//            
+//            if info.isCancelled {
+//                Text("已取消")
+//                    .font(.caption)
+//                    .foregroundColor(.orange)
+//            }
         }
         .padding(.top, 4)
     }

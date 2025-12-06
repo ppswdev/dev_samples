@@ -220,6 +220,9 @@ internal class StoreKitService: ObservableObject {
                 do {
                     let transaction = try verifyPurchase(verification)
                     
+                    // 打印详细的交易信息
+                    await printTransactionDetails(transaction: transaction, product: product)
+                    
                     // 如果是消耗品，立即完成交易
                     if product.type == .consumable {
                         await transaction.finish()
@@ -339,7 +342,7 @@ internal class StoreKitService: ObservableObject {
             return nil
         }
         
-        return await SubscriptionInfo.from(product)
+        return product.subscription
     }
     
     /// 打开订阅管理页面（使用 URL）
@@ -356,15 +359,30 @@ internal class StoreKitService: ObservableObject {
         #endif
     }
     
-    /// 显示应用内订阅管理界面（iOS 15.0+）
+    /// 显示应用内订阅管理界面（iOS 15.0+ / macOS 12.0+）
     /// - Returns: 是否成功显示（如果系统不支持则返回 false）
     @MainActor
     func showManageSubscriptionsSheet() async -> Bool {
         #if os(iOS)
         if #available(iOS 15.0, *) {
             do {
-                try await AppStore.showManageSubscriptions(in: await UIApplication.shared.connectedScenes.first as? UIWindowScene ?? UIApplication.shared.windows.first?.windowScene)
-                return true
+                // 获取当前的 windowScene
+                let windowScene = await UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .first
+                
+                if let windowScene = windowScene {
+                    try await AppStore.showManageSubscriptions(in: windowScene)
+                    
+                    // 订阅管理界面关闭后，刷新订阅状态
+                    await refreshSubscriptionStatus()
+                    
+                    return true
+                } else {
+                    // 如果无法获取 windowScene，回退到打开 URL
+                    openSubscriptionManagement()
+                    return false
+                }
             } catch {
                 print("显示订阅管理界面失败: \(error)")
                 // 如果失败，回退到打开 URL
@@ -380,6 +398,10 @@ internal class StoreKitService: ObservableObject {
         if #available(macOS 12.0, *) {
             do {
                 try await AppStore.showManageSubscriptions()
+                
+                // 订阅管理界面关闭后，刷新订阅状态
+                await refreshSubscriptionStatus()
+                
                 return true
             } catch {
                 print("显示订阅管理界面失败: \(error)")
@@ -410,6 +432,20 @@ internal class StoreKitService: ObservableObject {
         }
         
         return success
+    }
+    
+    /// 刷新订阅状态（同步最新的订阅信息）
+    @MainActor
+    func refreshSubscriptionStatus() async {
+        // 同步 App Store 的购买状态
+        do {
+            try await AppStore.sync()
+        } catch {
+            print("同步 App Store 状态失败: \(error)")
+        }
+        
+        // 重新获取已购买产品（会更新订阅状态）
+        await retrievePurchasedProducts()
     }
     
     // MARK: - 私有方法
@@ -446,7 +482,7 @@ internal class StoreKitService: ObservableObject {
             .sink { [weak self] products in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    await self.notifyProductsLoaded(products)
+                    self.notifyProductsLoaded(products)
                 }
             }
             .store(in: &cancellables)
@@ -457,7 +493,7 @@ internal class StoreKitService: ObservableObject {
             .sink { [weak self] products in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    await self.notifyPurchasedProductsUpdated(products)
+                    self.notifyPurchasedProductsUpdated(products)
                 }
             }
             .store(in: &cancellables)
@@ -468,7 +504,7 @@ internal class StoreKitService: ObservableObject {
             .sink { [weak self] status in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    await self.notifySubscriptionStatusChanged(status)
+                    self.notifySubscriptionStatusChanged(status)
                 }
             }
             .store(in: &cancellables)
@@ -522,6 +558,160 @@ internal class StoreKitService: ObservableObject {
     /// 按价格排序产品
     private func sortByPrice(_ products: [Product]) -> [Product] {
         products.sorted(by: { $0.price < $1.price })
+    }
+    
+    /// 打印详细的交易信息
+    private func printTransactionDetails(transaction: Transaction, product: Product) async {
+        // 时间格式化为东八区（北京时间）
+        let beijingTimeZone = TimeZone(secondsFromGMT: 8 * 3600) ?? .current
+        let formatter = DateFormatter()
+        formatter.timeZone = beijingTimeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+
+        print("════════════════════════════════════════")
+        print("✅ 购买成功 - 交易详细信息")
+        print("════════════════════════════════════════")
+        print("📦 产品信息:")
+        print("   - 产品ID: \(transaction.productID)")
+        print("   - 产品名称: \(product.displayName)")
+        print("   - 产品描述: \(product.description)")
+        print("   - 产品类型: \(product.type)")
+        print("   - 产品价格: \(product.displayPrice)")
+        print("   - 价格数值: \(product.price)")
+       
+        print("")
+        print("💳 交易信息:")
+        print("   - 交易ID: \(transaction.id)") // 当前交易的唯一标识符
+        print("   - 产品ID: \(transaction.productID)") // 购买的产品ID
+        print("   - 产品类型: \(transaction.productType)") // 产品类型（消耗品/非消耗品/非续订订阅/自动续订订阅）
+        print("   - 购买日期: \(formatter.string(from: transaction.purchaseDate))") // 购买时间（UTC时间）
+        print("   - 所有权类型: \(transaction.ownershipType)") // 所有权类型（purchased/familyShared）
+        print("   - 原始交易ID: \(transaction.originalID)") // 首次购买的交易ID（用于订阅续订）
+        print("   - 原始购买日期: \(formatter.string(from: transaction.originalPurchaseDate))") // 首次购买时间
+        
+        // 过期日期（仅订阅产品有）
+        if let expirationDate = transaction.expirationDate {
+            let dateStr = formatter.string(from: expirationDate)
+            print("   - 过期日期: \(dateStr)") // 订阅过期时间
+        } else {
+            print("   - 过期日期: 无")
+        }
+        
+        // 撤销日期（如果已退款/撤销）
+        if let revocationDate = transaction.revocationDate {
+            let dateStr = formatter.string(from: revocationDate)
+            print("   - 撤销日期: \(dateStr)") // 退款或撤销的时间
+        } else {
+            print("   - 撤销日期: 无")
+        }
+        
+        // 撤销原因
+        if let revocationReason = transaction.revocationReason {
+            print("   - 撤销原因: \(revocationReason)") // 退款/撤销的原因代码
+        }
+        print("   - 购买原因: \(transaction.reason.rawValue)") // 购买原因（purchased/upgraded/renewed等）
+        print("   - 是否升级: \(transaction.isUpgraded)") // 是否为升级购买
+        
+        // 购买数量
+        print("   - 购买数量: \(transaction.purchasedQuantity)") // 购买的数量
+        
+        // 价格
+        if let price = transaction.price {
+            print("   - 交易价格: \(price)") // 实际支付的价格
+        }
+        
+        // 货币代码
+        if let currency = transaction.currency {
+            print("   - 货币代码: \(currency)") // 货币代码（如CNY、USD）
+        }
+        print("   - 环境: \(transaction.environment.rawValue)") // 交易环境（sandbox/production）
+        print("   - 应用交易ID: \(transaction.appTransactionID)") // 应用级别的交易ID
+        print("   - 应用Bundle ID: \(transaction.appBundleID )") // 应用的Bundle标识符
+        // 应用账户Token（用于关联用户账户）
+        if let appAccountToken = transaction.appAccountToken {
+            print("   - 应用账户Token: \(appAccountToken)") // 用于关联用户账户的Token
+        }
+        // 订阅组ID（仅订阅产品）
+        if let subscriptionGroupID = transaction.subscriptionGroupID {
+            print("   - 订阅组ID: \(subscriptionGroupID)") // 订阅所属的组ID
+        }
+        
+        // 订阅状态（仅订阅产品）
+        //if let subscriptionStatus = await transaction.subscriptionStatus {
+        //    print("   - 订阅状态: \(subscriptionStatus)") // 订阅的当前状态
+        //}
+        
+        print("   - 签名日期: \(formatter.string(from: transaction.signedDate))") // 交易签名的日期
+        print("   - 商店区域: \(transaction.storefront)") // 商店区域代码
+        
+        // Web订单行项目ID
+        if let webOrderLineItemID = transaction.webOrderLineItemID {
+            print("   - Web订单行项目ID: \(webOrderLineItemID)") // Web订单的行项目ID
+        }
+        print("   - 设备验证: \(transaction.deviceVerification)") // 设备验证数据
+        print("   - 设备验证Nonce: \(transaction.deviceVerificationNonce)") // 设备验证的Nonce值
+        
+        // 优惠信息
+        if #available(iOS 17.2, *) {
+            if let offer = transaction.offer {
+                print("   - 优惠信息: \(offer)") // 使用的优惠信息
+            }
+        } else {
+            // Fallback on earlier versions
+        }
+        
+        // 高级商务信息
+        if #available(iOS 18.4, *) {
+            if let advancedCommerceInfo = transaction.advancedCommerceInfo {
+                print("   - 高级商务信息: \(advancedCommerceInfo)") // 高级商务相关信息
+            }
+        } else {
+            // Fallback on earlier versions
+        }
+        
+        // JSON表示（用于服务器验证）
+        //if let jsonRepresentation = transaction.jsonRepresentation {
+        //    print("   - JSON表示 (前200字符): \(String(jsonRepresentation.prefix(200)))...") // JSON格式的交易数据，可用于服务器验证
+        //}
+        
+        // Debug描述
+        print("   - Debug描述: \(transaction.debugDescription)") // 调试用的描述信息
+        print("")
+        
+        // 如果是订阅，打印订阅相关信息
+        if let subscription = product.subscription {
+            print("📱 订阅信息:")
+            print("   - 订阅组ID: \(subscription.subscriptionGroupID)")
+            
+            // 打印订阅周期
+            let period = subscription.subscriptionPeriod
+            let periodName: String
+            switch period.unit {
+            case .day:
+                periodName = "\(period.value) 天"
+            case .week:
+                periodName = "\(period.value) 周"
+            case .month:
+                periodName = "\(period.value) 月"
+            case .year:
+                periodName = "\(period.value) 年"
+            @unknown default:
+                periodName = "未知"
+            }
+            print("   - 订阅周期: \(periodName)")
+            
+            // 介绍性优惠
+            if let introductoryOffer = subscription.introductoryOffer {
+                print("   - 介绍性优惠: 有")
+                print("     * 支付模式: \(introductoryOffer.paymentMode)")
+                print("     * 价格: \(introductoryOffer.displayPrice)")
+            } else {
+                print("   - 介绍性优惠: 无")
+            }
+        }
+        
+        print("════════════════════════════════════════")
+        print("")
     }
 }
 
