@@ -43,6 +43,24 @@ public enum StoreKitState: Equatable {
     /// 订阅状态变化
     case subscriptionStatusChanged(Product.SubscriptionInfo.RenewalState)
     
+    /// 正在恢复购买
+    case restoringPurchases
+    
+    /// 恢复购买成功
+    case restorePurchasesSuccess
+    
+    /// 恢复购买失败
+    case restorePurchasesFailed(Error)
+    
+    /// 购买已退款
+    case purchaseRefunded(String) // 产品ID
+    
+    /// 购买已撤销
+    case purchaseRevoked(String) // 产品ID
+    
+    /// 订阅已取消
+    case subscriptionCancelled(String) // 产品ID
+    
     /// 发生错误
     case error(Error)
     
@@ -64,6 +82,15 @@ public enum StoreKitState: Equatable {
             return lhsId == rhsId
         case (.subscriptionStatusChanged(let lhsState), .subscriptionStatusChanged(let rhsState)):
             return lhsState == rhsState
+        case (.restoringPurchases, .restoringPurchases),
+             (.restorePurchasesSuccess, .restorePurchasesSuccess):
+            return true
+        case (.restorePurchasesFailed(let lhsError), .restorePurchasesFailed(let rhsError)):
+            return lhsError.localizedDescription == rhsError.localizedDescription
+        case (.purchaseRefunded(let lhsId), .purchaseRefunded(let rhsId)),
+             (.purchaseRevoked(let lhsId), .purchaseRevoked(let rhsId)),
+             (.subscriptionCancelled(let lhsId), .subscriptionCancelled(let rhsId)):
+            return lhsId == rhsId
         case (.error(let lhsError), .error(let rhsError)):
             return lhsError.localizedDescription == rhsError.localizedDescription
         default:

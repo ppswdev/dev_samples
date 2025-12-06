@@ -24,6 +24,15 @@ public enum StoreKitError: Error, LocalizedError {
     /// 服务未启动
     case serviceNotStarted
     
+    /// 购买正在进行中
+    case purchaseInProgress
+    
+    /// 取消订阅失败
+    case cancelSubscriptionFailed(Error)
+    
+    /// 恢复购买失败
+    case restorePurchasesFailed(Error)
+    
     /// 未知错误
     case unknownError
     
@@ -39,6 +48,12 @@ public enum StoreKitError: Error, LocalizedError {
             return "配置缺失，请先调用 configure 方法进行配置"
         case .serviceNotStarted:
             return "服务未启动，请先调用 configure 方法"
+        case .purchaseInProgress:
+            return "购买正在进行中，请等待当前购买完成"
+        case .cancelSubscriptionFailed(let error):
+            return "取消订阅失败: \(error.localizedDescription)"
+        case .restorePurchasesFailed(let error):
+            return "恢复购买失败: \(error.localizedDescription)"
         case .unknownError:
             return "未知错误"
         }
@@ -56,6 +71,12 @@ public enum StoreKitError: Error, LocalizedError {
             return "在调用其他方法之前，必须先调用 configure(with:delegate:) 或 configure(with:onStateChanged:) 方法"
         case .serviceNotStarted:
             return "StoreKitManager 尚未初始化，请先调用 configure 方法"
+        case .purchaseInProgress:
+            return "当前有购买正在进行，请等待完成后再试"
+        case .cancelSubscriptionFailed(let error):
+            return (error as? LocalizedError)?.failureReason ?? error.localizedDescription
+        case .restorePurchasesFailed(let error):
+            return (error as? LocalizedError)?.failureReason ?? error.localizedDescription
         case .unknownError:
             return "发生了未预期的错误"
         }

@@ -8,6 +8,11 @@
 import Foundation
 import StoreKit
 import Combine
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// StoreKit 内部服务类
 /// 负责与 StoreKit API 交互，处理产品加载、购买、交易监听等核心功能
@@ -24,6 +29,10 @@ internal class StoreKitService: ObservableObject {
     private var transactionListener: Task<Void, Error>?
     private var subscriberTasks: [Task<Void, Never>] = []
     private var cancellables = Set<AnyCancellable>()
+    
+    // 并发购买保护
+    private var isPurchasing = false
+    private let purchasingQueue = DispatchQueue(label: "com.storekit.purchasing")
     
     // 当前状态
     private var currentState: StoreKitState = .idle {
@@ -158,8 +167,38 @@ internal class StoreKitService: ObservableObject {
         }
     }
     
-    /// 购买产品
-    func purchase(_ product: Product) async {
+    /// 购买产品（带并发保护）
+    func purchase(_ product: Product) async throws {
+        // 并发购买保护
+        return try await withCheckedThrowingContinuation { continuation in
+            purchasingQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume(throwing: StoreKitError.unknownError)
+                    return
+                }
+                
+                guard !self.isPurchasing else {
+                    continuation.resume(throwing: StoreKitError.purchaseInProgress)
+                    return
+                }
+                
+                self.isPurchasing = true
+                
+                Task {
+                    defer {
+                        self.purchasingQueue.async {
+                            self.isPurchasing = false
+                        }
+                    }
+                    
+                    await self.performPurchase(product, continuation: continuation)
+                }
+            }
+        }
+    }
+    
+    /// 执行购买
+    private func performPurchase(_ product: Product, continuation: CheckedContinuation<Void, Error>) async {
         currentState = .purchasing(product.id)
         
         do {
@@ -170,26 +209,136 @@ internal class StoreKitService: ObservableObject {
                 do {
                     let transaction = try verifyPurchase(verification)
                     
+                    // 如果是消耗品，立即完成交易
+                    if product.type == .consumable {
+                        await transaction.finish()
+                    }
+                    
                     await retrievePurchasedProducts()
-                    await transaction.finish()
+                    
+                    // 非消耗品和订阅在 retrievePurchasedProducts 后完成
+                    if product.type != .consumable {
+                        await transaction.finish()
+                    }
                     
                     currentState = .purchaseSuccess(transaction.productID)
+                    continuation.resume()
                 } catch {
                     currentState = .purchaseFailed(product.id, error)
+                    continuation.resume(throwing: error)
                 }
                 
             case .pending:
                 currentState = .purchasePending(product.id)
+                continuation.resume()
                 
             case .userCancelled:
                 currentState = .purchaseCancelled(product.id)
+                continuation.resume()
                 
             @unknown default:
-                currentState = .purchaseFailed(product.id, StoreKitError.unknownError)
+                let error = StoreKitError.unknownError
+                currentState = .purchaseFailed(product.id, error)
+                continuation.resume(throwing: error)
             }
         } catch {
             currentState = .purchaseFailed(product.id, error)
+            continuation.resume(throwing: error)
         }
+    }
+    
+    /// 恢复购买
+    @MainActor
+    func restorePurchases() async throws {
+        currentState = .restoringPurchases
+        
+        do {
+            try await AppStore.sync()
+            await retrievePurchasedProducts()
+            currentState = .restorePurchasesSuccess
+        } catch {
+            currentState = .restorePurchasesFailed(error)
+            throw StoreKitError.restorePurchasesFailed(error)
+        }
+    }
+    
+    /// 获取交易历史
+    func getTransactionHistory(for productId: String? = nil) async -> [TransactionHistory] {
+        var histories: [TransactionHistory] = []
+        
+        // 查询所有历史交易
+        for await verificationResult in Transaction.all {
+            do {
+                let transaction = try verifyPurchase(verificationResult)
+                
+                // 如果指定了产品ID，则过滤
+                if let productId = productId, transaction.productID != productId {
+                    continue
+                }
+                
+                // 查找对应的产品对象
+                let product = allProducts.first(where: { $0.id == transaction.productID })
+                
+                let history = TransactionHistory.from(transaction, product: product)
+                histories.append(history)
+                
+                // 检查是否退款或撤销
+                if transaction.revocationDate != nil {
+                    await MainActor.run {
+                        if transaction.productType == .autoRenewable {
+                            currentState = .subscriptionCancelled(transaction.productID)
+                        } else {
+                            currentState = .purchaseRefunded(transaction.productID)
+                        }
+                    }
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        // 按购买日期倒序排列
+        return histories.sorted(by: { $0.purchaseDate > $1.purchaseDate })
+    }
+    
+    /// 获取消耗品的购买历史
+    func getConsumablePurchaseHistory(for productId: String) async -> [TransactionHistory] {
+        let allHistory = await getTransactionHistory(for: productId)
+        return allHistory.filter { history in
+            history.product?.type == .consumable
+        }
+    }
+    
+    /// 获取订阅详细信息
+    func getSubscriptionInfo(for productId: String) async -> SubscriptionInfo? {
+        guard let product = allProducts.first(where: { $0.id == productId }),
+              product.type == .autoRenewable else {
+            return nil
+        }
+        
+        return await SubscriptionInfo.from(product)
+    }
+    
+    /// 打开订阅管理页面
+    @MainActor
+    func openSubscriptionManagement() {
+        guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else { return }
+        
+        #if os(iOS)
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        }
+        #elseif os(macOS)
+        NSWorkspace.shared.open(url)
+        #endif
+    }
+    
+    /// 取消订阅（打开系统设置）
+    @MainActor
+    func cancelSubscription(for productId: String) {
+        // 在 iOS 上，取消订阅需要通过系统设置
+        // 这里打开订阅管理页面
+        openSubscriptionManagement()
     }
     
     // MARK: - 私有方法
@@ -242,6 +391,18 @@ internal class StoreKitService: ObservableObject {
             for await result in Transaction.updates {
                 do {
                     let transaction = try self.verifyPurchase(result)
+                    
+                    // 检查是否退款或撤销
+                    if transaction.revocationDate != nil {
+                        await MainActor.run {
+                            if transaction.productType == .autoRenewable {
+                                self.currentState = .subscriptionCancelled(transaction.productID)
+                            } else {
+                                // 有撤销日期通常表示退款
+                                self.currentState = .purchaseRefunded(transaction.productID)
+                            }
+                        }
+                    }
                     
                     await MainActor.run {
                         Task {

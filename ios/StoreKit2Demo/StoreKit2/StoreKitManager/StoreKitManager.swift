@@ -8,6 +8,15 @@
 import Foundation
 import StoreKit
 
+/// 交易类型别名
+public typealias Transaction = StoreKit.Transaction
+
+/// 续订信息类型别名
+public typealias RenewalInfo = StoreKit.Product.SubscriptionInfo.RenewalInfo
+
+/// 续订状态类型别名
+public typealias RenewalState = StoreKit.Product.SubscriptionInfo.RenewalState
+
 /// StoreKit 管理器
 /// 提供统一的接口来管理应用内购买
 public class StoreKitManager {
@@ -32,7 +41,7 @@ public class StoreKitManager {
     public var onPurchasedProductsUpdated: (([Product]) -> Void)?
     
     /// 订阅状态变化回调
-    public var onSubscriptionStatusChanged: ((Product.SubscriptionInfo.RenewalState?) -> Void)?
+    public var onSubscriptionStatusChanged: ((RenewalState?) -> Void)?
     
     // MARK: - 当前状态和数据
     
@@ -46,7 +55,7 @@ public class StoreKitManager {
     public private(set) var purchasedProducts: [Product] = []
     
     /// 订阅状态
-    public private(set) var subscriptionStatus: Product.SubscriptionInfo.RenewalState?
+    public private(set) var subscriptionStatus: RenewalState?
     
     // MARK: - 按类型分类的产品（计算属性）
     
@@ -121,13 +130,17 @@ public class StoreKitManager {
         guard let product = allProducts.first(where: { $0.id == productId }) else {
             throw StoreKitError.productNotFound(productId)
         }
-        await service?.purchase(product)
+        try await service?.purchase(product)
     }
     
     /// 通过产品对象购买
     /// - Parameter product: 产品对象
-    public func purchase(_ product: Product) async {
-        await service?.purchase(product)
+    /// - Throws: StoreKitError.purchaseInProgress 如果已有购买正在进行
+    public func purchase(_ product: Product) async throws {
+        guard let service = service else {
+            throw StoreKitError.serviceNotStarted
+        }
+        try await service.purchase(product)
     }
     
     // MARK: - 查询方法
@@ -156,6 +169,52 @@ public class StoreKitManager {
     /// 手动刷新已购买产品列表
     public func refreshPurchases() async {
         await service?.retrievePurchasedProducts()
+    }
+    
+    // MARK: - 恢复购买
+    
+    /// 恢复购买
+    /// - Throws: StoreKitError.restorePurchasesFailed 如果恢复失败
+    public func restorePurchases() async throws {
+        try await service?.restorePurchases()
+    }
+    
+    // MARK: - 交易历史
+    
+    /// 获取交易历史
+    /// - Parameter productId: 可选的产品ID，如果提供则只返回该产品的交易历史
+    /// - Returns: 交易历史记录数组，按购买日期倒序排列
+    public func getTransactionHistory(for productId: String? = nil) async -> [TransactionHistory] {
+        await service?.getTransactionHistory(for: productId) ?? []
+    }
+    
+    /// 获取消耗品的购买历史
+    /// - Parameter productId: 产品ID
+    /// - Returns: 该消耗品的所有购买历史
+    public func getConsumablePurchaseHistory(for productId: String) async -> [TransactionHistory] {
+        await service?.getConsumablePurchaseHistory(for: productId) ?? []
+    }
+    
+    // MARK: - 订阅相关
+    
+    /// 获取订阅详细信息
+    /// - Parameter productId: 产品ID
+    /// - Returns: 订阅信息，如果不是订阅产品则返回 nil
+    public func getSubscriptionInfo(for productId: String) async -> SubscriptionInfo? {
+        await service?.getSubscriptionInfo(for: productId)
+    }
+    
+    /// 打开订阅管理页面（系统设置）
+    @MainActor
+    public func openSubscriptionManagement() {
+        service?.openSubscriptionManagement()
+    }
+    
+    /// 取消订阅（打开系统设置页面）
+    /// - Parameter productId: 产品ID
+    @MainActor
+    public func cancelSubscription(for productId: String) {
+        service?.cancelSubscription(for: productId)
     }
     
     // MARK: - 控制方法
@@ -206,7 +265,7 @@ extension StoreKitManager: StoreKitServiceDelegate {
         onPurchasedProductsUpdated?(products)
     }
     
-    func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: Product.SubscriptionInfo.RenewalState?) {
+    func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: RenewalState?) {
         subscriptionStatus = status
         
         // 通知代理

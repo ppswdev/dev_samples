@@ -11,7 +11,21 @@
   },
   "identifier" : "2E9BF386",
   "nonRenewingSubscriptions" : [
-
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "A8A4C5D2",
+      "localizations" : [
+        {
+          "description" : "Once purchase monthly vip",
+          "displayName" : "Monthly VIP Once",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.ppswdev.store.non.monthlyvip",
+      "referenceName" : "Monthly VIP of Single",
+      "type" : "NonRenewingSubscription"
+    }
   ],
   "products" : [
     {
@@ -20,12 +34,12 @@
       "internalID" : "891B8B94",
       "localizations" : [
         {
-          "description" : "",
-          "displayName" : "",
+          "description" : "Lifetime access vip",
+          "displayName" : "Lifetime Access",
           "locale" : "en_US"
         }
       ],
-      "productID" : "chooser_all_life_vip",
+      "productID" : "com.ppswdev.store.lifetimevip",
       "referenceName" : "Lifetime VIP",
       "type" : "NonConsumable"
     },
@@ -35,12 +49,12 @@
       "internalID" : "68B1A628",
       "localizations" : [
         {
-          "description" : "",
-          "displayName" : "",
+          "description" : "Lifetime access origin vip",
+          "displayName" : "Lifetime Access 2",
           "locale" : "en_US"
         }
       ],
-      "productID" : "chooser_origin_lifetime_price",
+      "productID" : "com.ppswdev.store.lifetimevip2",
       "referenceName" : "Lifetime VIP 2",
       "type" : "NonConsumable"
     }
@@ -123,12 +137,12 @@
           },
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Weekly VIP of Guide",
+              "displayName" : "Weekly VIP Guide",
               "locale" : "en_US"
             }
           ],
-          "productID" : "chooser_guide_trial_weekly_vip",
+          "productID" : "com.ppswdev.store.onboarding.weeklyvip",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly VIP of Guide",
           "subscriptionGroupID" : "732E29F2",
@@ -144,7 +158,7 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "9.99",
+          "displayPrice" : "6.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "2A2AAFFF",
@@ -155,12 +169,12 @@
           },
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Weekly VIP of Detainment",
+              "displayName" : "Weekly VIP WL",
               "locale" : "en_US"
             }
           ],
-          "productID" : "chooser_guide_remain_trial_9.99",
+          "productID" : "com.ppswdev.store.detainment.weeklyvip",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly VIP of Detainment",
           "subscriptionGroupID" : "732E29F2",
@@ -188,12 +202,12 @@
           },
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Weekly VIP of in app",
+              "displayName" : "Weekly VIP InApp",
               "locale" : "en_US"
             }
           ],
-          "productID" : "chooser_inapp_trial2_6.99",
+          "productID" : "com.ppswdev.store.inapp.weeklyvip",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly VIP of InApp",
           "subscriptionGroupID" : "732E29F2",
@@ -209,7 +223,7 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "6.99",
+          "displayPrice" : "4.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "98A6BB00",
@@ -220,12 +234,12 @@
           },
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Weekly Vip of in app WL",
+              "displayName" : "Weekly VIP InApp WL",
               "locale" : "en_US"
             }
           ],
-          "productID" : "chooser_inapp_remain_trial2_4.99",
+          "productID" : "com.ppswdev.store.inapp.weeklyvip.wl",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly VIP of InApp Detainment",
           "subscriptionGroupID" : "732E29F2",
@@ -241,81 +255,49 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "29.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "8D98BA1E",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "",
-              "displayName" : "",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "chooser_inapp_yearly_vip",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Yearly VIP of InApp",
-          "subscriptionGroupID" : "732E29F2",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "3.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "12E9BE2F",
-          "introductoryOffer" : {
-            "internalID" : "64941511",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "",
-              "displayName" : "",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "dm_gift_trial_weekly",
-          "recurringSubscriptionPeriod" : "P1W",
-          "referenceName" : "Weekly VIP of Gift",
-          "subscriptionGroupID" : "732E29F2",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "0.99",
+          "displayPrice" : "39.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "B16ABC04",
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Monthly VIP of in app",
+              "displayName" : "Monthly VIP InApp",
               "locale" : "en_US"
             }
           ],
-          "productID" : "chooser_inapp_monthly_vip",
+          "productID" : "com.ppswdev.store.inapp.monthlyvip",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Monthly VIP of InApp",
+          "subscriptionGroupID" : "732E29F2",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "69.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "194AEF91",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Yearly vip of in app",
+              "displayName" : "Yearly VIP InApp",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.ppswdev.store.inapp.yearlyvip",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Yearly VIP of InApp",
           "subscriptionGroupID" : "732E29F2",
           "type" : "RecurringSubscription",
           "winbackOffers" : [
