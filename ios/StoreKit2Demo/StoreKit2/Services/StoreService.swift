@@ -8,7 +8,7 @@
 import Foundation
 import StoreKit
 
-enum StoreKitError: Error {
+enum StoreKit2Error: Error {
     case failedVerification
     case unknownError
 }
@@ -206,7 +206,7 @@ class StoreService: ObservableObject {
             case .userCancelled:
                 purchaseStatus = .cancelled
             default:
-                purchaseStatus = .failed(StoreKitError.unknownError)
+                purchaseStatus = .failed(StoreKit2Error.unknownError)
             }
         } catch {
             purchaseStatus = .failed(error)
