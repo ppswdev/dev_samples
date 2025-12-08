@@ -159,7 +159,6 @@
           "groupNumber" : 1,
           "internalID" : "D7180163",
           "introductoryOffer" : {
-            "displayPrice" : "0.99",
             "internalID" : "19311780",
             "paymentMode" : "free",
             "subscriptionPeriod" : "P3D"
@@ -191,7 +190,11 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "B16ABC04",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "4C9FF7DF",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
           "localizations" : [
             {
               "description" : "Monthly VIP of in app",
@@ -219,7 +222,11 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "194AEF91",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "C06A3A9D",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
           "localizations" : [
             {
               "description" : "Yearly vip of in app",
@@ -239,6 +246,10 @@
       ]
     }
   ],
+  "subscriptionOffersKeyPair" : {
+    "id" : "5CAE6E5F",
+    "privateKey" : "MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgXqA0nmSLzTjCbeWl3gGT3bLB5LrxtjKeziWk+wdJe/egCgYIKoZIzj0DAQehRANCAAQe7tLCIJuwmwOiB8MEU29kV6BetPEN/hctR1zDSjpIhlpNzcs1FXIriQZO/qDZvmcPudbmmrEsc/Mee41gIDJ7"
+  },
   "version" : {
     "major" : 4,
     "minor" : 0

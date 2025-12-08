@@ -220,8 +220,9 @@ internal class StoreKitService: ObservableObject {
                 do {
                     let transaction = try verifyPurchase(verification)
                     
+                    await printProductDetails(product)
                     // 打印详细的交易信息
-                    await printTransactionDetails(transaction: transaction, product: product)
+                    await printTransactionDetails(transaction)
                     
                     // 如果是消耗品，立即完成交易
                     if product.type == .consumable {
@@ -279,6 +280,10 @@ internal class StoreKitService: ObservableObject {
         currentState = .restoringPurchases
         
         do {
+            /// 将已签名的交易信息和续订详情与应用商店进行同步。
+            /// StoreKit 会自动更新已签订单交易及续费信息，因此只有在用户表示已购买的产品无法正常使用时才应使用此功能。
+            /// - 重要提示：此操作会提示用户进行身份验证，仅在用户交互时调用此函数。
+            /// - 异常情况：如果用户身份验证不成功，或者 StoreKit 无法连接到 App Store。
             try await AppStore.sync()
             await retrievePurchasedProducts()
             currentState = .restorePurchasesSuccess
@@ -560,8 +565,7 @@ internal class StoreKitService: ObservableObject {
         products.sorted(by: { $0.price < $1.price })
     }
     
-    /// 打印详细的交易信息
-    private func printTransactionDetails(transaction: Transaction, product: Product) async {
+    private  func printProductDetails(_ product:Product) async{
         // 时间格式化为东八区（北京时间）
         let beijingTimeZone = TimeZone(secondsFromGMT: 8 * 3600) ?? .current
         let formatter = DateFormatter()
@@ -572,12 +576,151 @@ internal class StoreKitService: ObservableObject {
         print("✅ 购买成功 - 交易详细信息")
         print("════════════════════════════════════════")
         print("📦 产品信息:")
-        print("   - 产品ID: \(transaction.productID)")
+        print("   - 产品ID: \(product.id)")
+        print("   - 产品类型: \(product.type)")
         print("   - 产品名称: \(product.displayName)")
         print("   - 产品描述: \(product.description)")
-        print("   - 产品类型: \(product.type)")
         print("   - 产品价格: \(product.displayPrice)")
         print("   - 价格数值: \(product.price)")
+        print("   - 家庭共享: \(product.isFamilyShareable)")
+        print("   - 产品JSON: \(String.init(data: product.jsonRepresentation, encoding: .utf8))")
+         // 如果是订阅产品，打印订阅相关信息
+        if let subscription = product.subscription {
+            print("📱 订阅信息:")
+            print("   - 订阅组ID: \(subscription.subscriptionGroupID)")
+            
+            // 打印订阅周期
+            let period = subscription.subscriptionPeriod
+            let periodName: String
+            switch period.unit {
+            case .day:
+                periodName = "\(period.value) 天"
+            case .week:
+                periodName = "\(period.value) 周"
+            case .month:
+                periodName = "\(period.value) 月"
+            case .year:
+                periodName = "\(period.value) 年"
+            @unknown default:
+                periodName = "未知"
+            }
+            print("   - 订阅周期: \(periodName)")
+            
+            // 检查是否有资格使用介绍性优惠（异步）
+            let isEligibleForIntroOffer = await subscription.isEligibleForIntroOffer
+            print("   - 是否有资格使用介绍性优惠: \(isEligibleForIntroOffer ? "是" : "否")")
+            
+            // 介绍性优惠详细信息
+            if let introductoryOffer = subscription.introductoryOffer {
+                print("   - 介绍性优惠: 有")
+                printOfferDetails(introductoryOffer, indent: "     ")
+            } else {
+                print("   - 介绍性优惠: 无")
+            }
+            
+            // 促销优惠列表
+            if !subscription.promotionalOffers.isEmpty {
+                print("   - 促销优惠: 有 (\(subscription.promotionalOffers.count) 个)")
+                for (index, promotionalOffer) in subscription.promotionalOffers.enumerated() {
+                    print("     [促销优惠 \(index + 1)]")
+                    printOfferDetails(promotionalOffer, indent: "       ")
+                }
+            } else {
+                print("   - 促销优惠: 无")
+            }
+            
+            // 赢回优惠列表（iOS 18.0+）
+            if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *) {
+                if !subscription.winBackOffers.isEmpty {
+                    print("   - 赢回优惠: 有 (\(subscription.winBackOffers.count) 个)")
+                    for (index, winBackOffer) in subscription.winBackOffers.enumerated() {
+                        print("     [赢回优惠 \(index + 1)]")
+                        printOfferDetails(winBackOffer, indent: "       ")
+                    }
+                } else {
+                    print("   - 赢回优惠: 无")
+                }
+            }
+        }
+    }
+    
+    /// 打印优惠详细信息
+    /// - Parameters:
+    ///   - offer: 优惠对象
+    ///   - indent: 缩进字符串
+    private func printOfferDetails(_ offer: Product.SubscriptionOffer, indent: String) {
+        // 优惠ID（介绍性优惠为 nil，其他类型不为 nil）
+        if let offerID = offer.id {
+            print("\(indent)* 优惠ID: \(offerID)")
+        } else {
+            print("\(indent)* 优惠ID: 无（介绍性优惠）")
+        }
+        
+        // 优惠类型（不是可选的）
+        let typeName: String
+        if offer.type == .introductory {
+            typeName = "介绍性优惠"
+        } else if offer.type == .promotional {
+            typeName = "促销优惠"
+        } else {
+            if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *) {
+                if offer.type == .winBack {
+                    typeName = "赢回优惠"
+                } else {
+                    typeName = "未知类型(\(offer.type.rawValue))"
+                }
+            } else {
+                typeName = "未知类型(\(offer.type.rawValue))"
+            }
+        }
+        print("\(indent)* 优惠类型: \(typeName)")
+        
+        // 价格信息
+        print("\(indent)* 显示价格: \(offer.displayPrice)")
+        print("\(indent)* 价格数值: \(offer.price)")
+        
+        // 支付模式（显示中文名称）
+        let paymentModeName: String
+        switch offer.paymentMode {
+        case .freeTrial:
+            paymentModeName = "免费试用"
+        case .payAsYouGo:
+            paymentModeName = "按需付费"
+        case .payUpFront:
+            paymentModeName = "预付"
+        default:
+            paymentModeName = "未知模式(\(offer.paymentMode.rawValue))"
+        }
+        print("\(indent)* 支付模式: \(paymentModeName)")
+        
+        // 优惠周期（不是可选的）
+        let offerPeriod = offer.period
+        let offerPeriodName: String
+        switch offerPeriod.unit {
+        case .day:
+            offerPeriodName = "\(offerPeriod.value) 天"
+        case .week:
+            offerPeriodName = "\(offerPeriod.value) 周"
+        case .month:
+            offerPeriodName = "\(offerPeriod.value) 月"
+        case .year:
+            offerPeriodName = "\(offerPeriod.value) 年"
+        @unknown default:
+            offerPeriodName = "未知"
+        }
+        print("\(indent)* 优惠周期: \(offerPeriodName)")
+        
+        // 周期数量（总是 1，除了 .payAsYouGo）
+        print("\(indent)* 周期数量: \(offer.periodCount)")
+    }
+    
+    /// 打印详细的产品和交易信息
+    private func printTransactionDetails(_ transaction: Transaction) async {
+        // 时间格式化为东八区（北京时间）
+        let beijingTimeZone = TimeZone(secondsFromGMT: 8 * 3600) ?? .current
+        let formatter = DateFormatter()
+        formatter.timeZone = beijingTimeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
        
         print("")
         print("💳 交易信息:")
@@ -652,12 +795,50 @@ internal class StoreKitService: ObservableObject {
         print("   - 设备验证Nonce: \(transaction.deviceVerificationNonce)") // 设备验证的Nonce值
         
         // 优惠信息
-        if #available(iOS 17.2, *) {
+        if #available(iOS 17.2, macOS 14.2, tvOS 17.2, watchOS 10.2, *) {
+            // iOS 17.2+ 使用新的 offer 属性
             if let offer = transaction.offer {
-                print("   - 优惠信息: \(offer)") // 使用的优惠信息
+                print("   - 优惠信息:")
+                print("     * 优惠类型: \(offer.type)")
+                if let offerID = offer.id {
+                    print("     * 优惠ID: \(offerID)")
+                }
+                print("     * 支付模式: \(String(describing: offer.paymentMode?.rawValue))")
+                if #available(iOS 18.4, *) {
+                    if let period = offer.period {
+                        print("     * 优惠周期: \(period)")
+                    }
+                } else {
+                    // Fallback on earlier versions
+                }
+            }
+        } else if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+            // iOS 15.0 - iOS 17.1 使用已废弃的属性
+            if let offerType = transaction.offerType {
+                print("   - 优惠信息:")
+                print("     * 优惠类型: \(offerType)")
+                
+                if let offerID = transaction.offerID {
+                    print("     * 优惠ID: \(offerID)")
+                }
+                
+                if let paymentMode = transaction.offerPaymentModeStringRepresentation {
+                    print("     * 支付模式: \(paymentMode)")
+                }
+                
+                if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
+                    // iOS 18.4+ 已废弃 offerPeriodStringRepresentation，但为了兼容性仍可检查
+                    // 实际上在 iOS 18.4+ 应该使用上面的 offer.period
+                } else {
+                    // iOS 15.0 - iOS 18.3 使用 offerPeriodStringRepresentation
+                    if let period = transaction.offerPeriodStringRepresentation {
+                        print("     * 优惠周期: \(period)")
+                    }
+                }
             }
         } else {
-            // Fallback on earlier versions
+            // iOS 15.0 以下版本不支持优惠信息
+            // 不输出任何内容
         }
         
         // 高级商务信息
@@ -678,37 +859,6 @@ internal class StoreKitService: ObservableObject {
         print("   - Debug描述: \(transaction.debugDescription)") // 调试用的描述信息
         print("")
         
-        // 如果是订阅，打印订阅相关信息
-        if let subscription = product.subscription {
-            print("📱 订阅信息:")
-            print("   - 订阅组ID: \(subscription.subscriptionGroupID)")
-            
-            // 打印订阅周期
-            let period = subscription.subscriptionPeriod
-            let periodName: String
-            switch period.unit {
-            case .day:
-                periodName = "\(period.value) 天"
-            case .week:
-                periodName = "\(period.value) 周"
-            case .month:
-                periodName = "\(period.value) 月"
-            case .year:
-                periodName = "\(period.value) 年"
-            @unknown default:
-                periodName = "未知"
-            }
-            print("   - 订阅周期: \(periodName)")
-            
-            // 介绍性优惠
-            if let introductoryOffer = subscription.introductoryOffer {
-                print("   - 介绍性优惠: 有")
-                print("     * 支付模式: \(introductoryOffer.paymentMode)")
-                print("     * 价格: \(introductoryOffer.displayPrice)")
-            } else {
-                print("   - 介绍性优惠: 无")
-            }
-        }
         
         print("════════════════════════════════════════")
         print("")

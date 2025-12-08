@@ -71,9 +71,9 @@ struct StoreExampleView: View {
                         viewModel.restorePurchases()
                     }
                     
-                    Button("刷新购买状态") {
+                    Button("刷新订阅状态和已购买记录") {
                         Task {
-                            await viewModel.refreshPurchases()
+                            await viewModel.refreshSubscriptionStatus()
                         }
                     }
                     
@@ -88,11 +88,6 @@ struct StoreExampleView: View {
                         }
                     }
                     
-                    Button("刷新订阅状态") {
-                        Task {
-                            await viewModel.refreshSubscriptionStatus()
-                        }
-                    }
                     
                     Button("打开订阅管理（URL）") {
                         viewModel.openSubscriptionManagement()
