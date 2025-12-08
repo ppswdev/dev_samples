@@ -20,8 +20,5 @@ internal protocol StoreKitServiceDelegate: AnyObject {
     
     /// 已购买交易订单更新
     func service(_ service: StoreKitService, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction])
-    
-    /// 订阅状态变化
-    func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: Product.SubscriptionInfo.RenewalState?)
 }
 

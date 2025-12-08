@@ -64,7 +64,7 @@ public enum StoreKitError: Error, LocalizedError {
         case .productNotFound(let id):
             return "请检查产品ID是否正确，并确保在 App Store Connect 中已配置该产品"
         case .purchaseFailed(let error):
-            return (error as? LocalizedError)?.failureReason ?? error.localizedDescription
+            return error.localizedDescription
         case .verificationFailed:
             return "交易数据无法通过 Apple 的验证，这可能是由于设备已越狱或交易数据被篡改"
         case .configurationMissing:

@@ -13,7 +13,8 @@ import SwiftUI
 @MainActor
 class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     @Published var products: [Product] = []
-    @Published var purchasedProducts: [Product] = []
+    @Published var purchasedTransactions: [Transaction] = []
+    @Published var latestTransactions: [Transaction] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var alertMessage: String?
@@ -58,6 +59,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         case .loadingProducts:
             isLoading = true
             errorMessage = nil
+            print("正在加载产品...")
             
         case .productsLoaded(let products):
             isLoading = false
@@ -66,10 +68,10 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             
         case .loadingPurchases:
             isLoading = true
-            
+            print("正在加载已购买交易...")
         case .purchasesLoaded:
             isLoading = false
-            print("✅ 已购买产品加载完成, 共 \(purchasedProducts.count) 个")
+            print("✅ 已购买产品加载完成, 共 \(purchasedTransactions.count) 个有效交易")
             
         case .purchasing(let productId):
             isLoading = true
@@ -128,13 +130,6 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
                 await refreshPurchases()
             }
             
-        case .subscriptionStatusChanged(let status):
-            print("📱 订阅状态变化: \(status)")
-            Task {
-                await refreshPurchases()
-                await loadSubscriptionInfo()
-            }
-            
         case .error(let error):
             isLoading = false
             errorMessage = error.localizedDescription
@@ -149,14 +144,9 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         self.products = products
     }
     
-    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions products: [Product]) {
-        self.purchasedProducts = products
-    }
-    
-    func storeKit(_ manager: StoreKitManager, didUpdateSubscriptionStatus status: RenewalState?) {
-        Task {
-            await loadSubscriptionInfo()
-        }
+    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
+        self.purchasedTransactions = efficient
+        self.latestTransactions = latests
     }
     
     // MARK: - 公共方法
@@ -187,7 +177,8 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     /// 刷新已购买产品
     func refreshPurchases() async {
         await StoreKitManager.shared.refreshPurchases()
-        self.purchasedProducts = StoreKitManager.shared.purchasedProducts
+        self.purchasedTransactions = StoreKitManager.shared.purchasedTransactions
+        self.latestTransactions = StoreKitManager.shared.latestTransactions
     }
     
     /// 检查是否已购买
@@ -196,85 +187,54 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     }
     
     /// 加载订阅信息
-    /// 优先加载已购买且有效的订阅信息
-    /// 使用 Product.SubscriptionInfo 来获取订阅状态
+    /// 从已购买的订阅交易中获取订阅信息
     func loadSubscriptionInfo() async {
-        // 1. 优先从已购买的订阅产品中获取
-        let purchasedSubscriptions = StoreKitManager.shared.autoRenewables.filter { product in
-            StoreKitManager.shared.isPurchased(productId: product.id)
+        // 从已购买的有效交易中查找订阅产品
+        let subscriptionTransactions = purchasedTransactions.filter { transaction in
+            transaction.productType == .autoRenewable
         }
         
-        // 2. 如果有已购买的订阅，通过 Product.SubscriptionInfo 获取状态
-        for purchasedSubscription in purchasedSubscriptions {
-            // 检查是否有订阅信息
-            guard let subscriptionInfo = purchasedSubscription.subscription else { continue }
-            
-            // 从 Product.SubscriptionInfo.status 获取订阅状态
-            // status 返回 [Product.SubscriptionInfo.Status] 数组，不是 AsyncSequence
-            do {
-                // 获取订阅状态数组（通常第一个是最新的）
-                let statuses = try await subscriptionInfo.status
-                
-                // 遍历状态数组
-                for status in statuses {
-                    // status.state 是 RenewalState（subscribed, expired, inBillingRetryPeriod, inGracePeriod, revoked）
-                    // status.renewalInfo 包含续订信息（willAutoRenew, expirationDate 等）
-                    
-                    // 如果订阅状态是已订阅，使用这个订阅信息
-                    if status.state == .subscribed {
-                        // 从 SubscriptionInfo.from 获取完整信息
-                        if let info = await StoreKitManager.shared.getSubscriptionInfo(for: purchasedSubscription.id) {
-                            self.subscriptionInfo = info
+        // 如果有订阅交易，从对应的产品中获取订阅信息
+        for transaction in subscriptionTransactions {
+            if let product = StoreKitManager.shared.product(for: transaction.productID),
+               let subscription = product.subscription {
+                // 检查订阅状态
+                do {
+                    let statuses = try await subscription.status
+                    for status in statuses {
+                        if status.state == .subscribed {
+                            self.subscriptionInfo = subscription
                             return
                         }
                     }
+                } catch {
+                    print("获取订阅状态失败: \(error)")
                 }
-            } catch {
-                print("获取订阅状态失败: \(error)")
-                continue
+                
+                // 如果状态不是 subscribed，仍然使用这个订阅信息（可能已过期但仍在有效期内）
+                self.subscriptionInfo = subscription
+                return
             }
-            
-            // 如果订阅状态不是 subscribed，尝试获取详细信息（可能已过期但仍在有效期内）
-//            if let info = await StoreKitManager.shared.getSubscriptionInfo(for: purchasedSubscription.id) {
-//                // 如果订阅有效（未过期），使用它
-//                if info.isValid {
-//                    self.subscriptionInfo = info
-//                    return
-//                }
-//            }
         }
         
-        // 3. 如果所有已购买的订阅都无效，使用第一个已购买订阅的信息（即使已过期）
-        if let firstPurchased = purchasedSubscriptions.first {
-            self.subscriptionInfo = await StoreKitManager.shared.getSubscriptionInfo(for: firstPurchased.id)
-            return
-        }
-        
-        // 4. 如果没有已购买的订阅，尝试从所有自动续订订阅中获取（用于显示订阅详情）
-        // 通过 Product.SubscriptionInfo 检查是否有活跃的订阅状态
+        // 如果没有已购买的订阅，尝试从所有自动续订订阅中获取（用于显示订阅详情）
         for autoRenewable in StoreKitManager.shared.autoRenewables {
-            guard let productSubscriptionInfo = autoRenewable.subscription else { continue }
-            
-            do {
-                // 检查是否有已订阅的状态
-                // status 返回 [Product.SubscriptionInfo.Status] 数组
-                let statuses = try await productSubscriptionInfo.status
-                
-                for status in statuses {
-                    if status.state == .subscribed {
-                        // 找到已订阅的产品，获取详细信息
-                        if let info = await StoreKitManager.shared.getSubscriptionInfo(for: autoRenewable.id) {
-                            self.subscriptionInfo = info
+            if let subscription = autoRenewable.subscription {
+                do {
+                    let statuses = try await subscription.status
+                    for status in statuses {
+                        if status.state == .subscribed {
+                            self.subscriptionInfo = subscription
                             return
                         }
                     }
+                } catch {
+                    continue
                 }
-            } catch {
-                continue
             }
         }
         
-        // 5. 如果没有任何订阅产品，清空订阅信息
+        // 如果没有任何订阅产品，清空订阅信息
         self.subscriptionInfo = nil
     }
     
@@ -287,31 +247,24 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     func showManageSubscriptionsSheet() async -> Bool {
         let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
         
-        // 订阅管理界面关闭后，刷新订阅状态
+        // 订阅管理界面关闭后，刷新状态
         if success {
-            await refreshSubscriptionStatus()
+            await refreshPurchases()
+            await loadSubscriptionInfo()
         }
         
         return success
     }
     
-    /// 取消订阅（显示应用内订阅管理界面）
-    func cancelSubscription(for productId: String? = nil) async -> Bool {
-        let success = await StoreKitManager.shared.cancelSubscription(for: productId)
+    /// 显示订阅管理界面（用于取消订阅）
+    func showSubscriptionManagement() async {
+        let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
         
-        // 订阅管理界面关闭后，刷新订阅状态
+        // 订阅管理界面关闭后，刷新状态
         if success {
-            await refreshSubscriptionStatus()
+            await refreshPurchases()
+            await loadSubscriptionInfo()
         }
-        
-        return success
-    }
-    
-    /// 刷新订阅状态（获取最新的订阅信息）
-    func refreshSubscriptionStatus() async {
-        await StoreKitManager.shared.refreshSubscriptionStatus()
-        await refreshPurchases()
-        await loadSubscriptionInfo()
     }
     
     /// 获取交易历史

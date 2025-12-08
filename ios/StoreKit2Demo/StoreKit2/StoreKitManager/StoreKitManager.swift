@@ -40,25 +40,22 @@ public class StoreKitManager {
     /// 产品加载成功回调
     public var onProductsLoaded: (([Product]) -> Void)?
     
-    /// 已购买产品更新回调
-    public var onPurchasedTransactionsUpdated: (([Product]) -> Void)?
-    
-    /// 订阅状态变化回调
-    public var onSubscriptionStatusChanged: ((RenewalState?) -> Void)?
+    /// 已购买产品更新回调: 有效的交易，每个产品最新的交易
+    public var onPurchasedTransactionsUpdated: (([Transaction],[Transaction]) -> Void)?
     
     // MARK: - 当前状态和数据
     
-    /// 当前状态
+    /// 当前执行的状态
     public private(set) var currentState: StoreKitState = .idle
     
     /// 所有产品
     public private(set) var allProducts: [Product] = []
     
-    /// 已购买的产品
-    public private(set) var purchasedProducts: [Product] = []
+    /// 已购买有效的交易信息
+    public private(set) var purchasedTransactions: [Transaction] = []
     
-    /// 订阅状态
-    public private(set) var subscriptionStatus: RenewalState?
+    /// 每个产品的最新交易记录集合
+    public private(set) var latestTransactions: [Transaction] = []
     
     // MARK: - 按类型分类的产品（计算属性）
     
@@ -80,23 +77,6 @@ public class StoreKitManager {
     /// 自动续订订阅
     public var autoRenewables: [Product] {
         allProducts.filter { $0.type == .autoRenewable }
-    }
-    
-    // MARK: - 按类型分类的已购买产品（计算属性）
-    
-    /// 已购买的非消耗品
-    public var purchasedNonConsumables: [Product] {
-        purchasedProducts.filter { $0.type == .nonConsumable }
-    }
-    
-    /// 已购买的非续订订阅
-    public var purchasedNonRenewables: [Product] {
-        purchasedProducts.filter { $0.type == .nonRenewable }
-    }
-    
-    /// 已购买的自动续订订阅
-    public var purchasedAutoRenewables: [Product] {
-        purchasedProducts.filter { $0.type == .autoRenewable }
     }
     
     // MARK: - 初始化
@@ -152,9 +132,19 @@ public class StoreKitManager {
     /// - Parameter productId: 产品ID
     /// - Returns: 如果已购买返回 true
     public func isPurchased(productId: String) -> Bool {
-        return purchasedProducts.contains(where: { $0.id == productId })
+        return latestTransactions.contains(where: { $0.productID == productId })
     }
     
+    /// 检查产品是否通过家庭共享获得
+    /// - Parameter productId: 产品ID
+    /// - Returns: 如果是通过家庭共享获得返回 true，否则返回 false
+    /// - Note: 只有支持家庭共享的产品才能通过家庭共享获得
+    public func isFamilyShared(productId: String) -> Bool {
+        guard let transaction = latestTransactions.first(where: { $0.productID == productId }) else {
+            return false
+        }
+        return transaction.ownershipType == .familyShared
+    }
     /// 获取产品对象
     /// - Parameter productId: 产品ID
     /// - Returns: 产品对象，如果未找到返回 nil
@@ -171,7 +161,7 @@ public class StoreKitManager {
     
     /// 手动刷新已购买产品列表
     public func refreshPurchases() async {
-        await service?.retrievePurchasedProducts()
+        await service?.loadPurchasedTransactions()
     }
     
     // MARK: - 恢复购买
@@ -203,8 +193,34 @@ public class StoreKitManager {
     /// 获取订阅详细信息
     /// - Parameter productId: 产品ID
     /// - Returns: 订阅信息，如果不是订阅产品则返回 nil
-    public func getSubscriptionInfo(for productId: String) async -> SubscriptionInfo? {
-        await service?.getSubscriptionInfo(for: productId)
+    public func getSubscriptionInfo(for productId: String) async -> ValidSubscriptionInfo? {
+        guard let product = allProducts.first(where: { $0.id == productId }) else {
+            return nil
+        }
+        return await ValidSubscriptionInfo.from(product)
+    }
+    
+    /// 获取订阅续订信息
+    /// - Parameter productId: 产品ID
+    /// - Returns: 续订信息，如果不是订阅产品或获取失败则返回 nil
+    /// - Note: RenewalInfo 包含 willAutoRenew（是否自动续订）、expirationDate（过期日期）、renewalDate（续订日期）等信息
+    public func getRenewalInfo(for productId: String) async -> RenewalInfo? {
+        guard let product = allProducts.first(where: { $0.id == productId }),
+              let subscription = product.subscription else {
+            return nil
+        }
+        
+        do {
+            let statuses = try await subscription.status
+            if let status = statuses.first,
+               case .verified(let renewalInfo) = status.renewalInfo {
+                return renewalInfo
+            }
+        } catch {
+            print("获取续订信息失败: \(error)")
+            return nil
+        }
+        return nil
     }
     
     /// 打开订阅管理页面（使用 URL）
@@ -220,19 +236,19 @@ public class StoreKitManager {
         await service?.showManageSubscriptionsSheet() ?? false
     }
     
-    /// 取消订阅（显示应用内订阅管理界面）
-    /// - Parameter productId: 产品ID（可选，如果提供则直接定位到该订阅）
-    /// - Returns: 是否成功显示管理界面
+    /// 显示优惠代码兑换界面（iOS 16.0+）
+    /// - Throws: StoreKitError 如果显示失败
+    /// - Note: 兑换后的交易会通过 Transaction.updates 发出
     @MainActor
-    public func cancelSubscription(for productId: String? = nil) async -> Bool {
-        await service?.cancelSubscription(for: productId) ?? false
-    }
-    
-    /// 刷新订阅状态（同步最新的订阅信息）
-    /// 在用户取消订阅后调用此方法可以获取最新的订阅状态
-    @MainActor
-    public func refreshSubscriptionStatus() async {
-        await service?.refreshSubscriptionStatus()
+    @available(iOS 16.0, visionOS 1.0, *)
+    @available(macOS, unavailable)
+    @available(watchOS, unavailable)
+    @available(tvOS, unavailable)
+    public func presentOfferCodeRedeemSheet() async throws {
+        guard let service = service else {
+            throw StoreKitError.serviceNotStarted
+        }
+        try await service.presentOfferCodeRedeemSheet()
     }
     
     // MARK: - 控制方法
@@ -245,8 +261,6 @@ public class StoreKitManager {
         delegate = nil
         currentState = .idle
         allProducts = []
-        purchasedProducts = []
-        subscriptionStatus = nil
     }
 }
 
@@ -277,40 +291,13 @@ extension StoreKitManager: StoreKitServiceDelegate {
     
     @MainActor
     func service(_ service: StoreKitService, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
-        purchasedProducts = efficient
+        purchasedTransactions = efficient
         
         // 通知代理
         delegate?.storeKit(self, didUpdatePurchasedTransactions: efficient, latests: latests)
         
         // 通知闭包回调
-        onPurchasedTransactionsUpdated?(products)
-    }
-    
-    @MainActor
-    func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: RenewalState?) {
-        subscriptionStatus = status
-
-        // 打印订阅状态
-        switch status {
-        case .subscribed:
-            print("当前订阅状态：已订阅")
-        case .expired:
-            print("当前订阅状态：已过期")
-        case .revoked:
-            print("当前订阅状态：已撤销")
-        case .inBillingRetryPeriod:
-            print("当前订阅状态：在计费重试期")
-        case .inGracePeriod:
-            print("当前订阅状态：在宽限期")
-        default:
-            print("当前订阅状态：未知")
-        }
-        
-        // 通知代理
-        delegate?.storeKit(self, didUpdateSubscriptionStatus: status)
-        
-        // 通知闭包回调
-        onSubscriptionStatusChanged?(status)
+        onPurchasedTransactionsUpdated?(efficient, latests)
     }
 }
 

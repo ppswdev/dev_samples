@@ -106,7 +106,6 @@ internal class StoreKitService: ObservableObject {
             self.allProducts = products
         } catch {
             currentState = .error(error)
-            print("无法从 App Store 获取产品: \(error)")
         }
     }
     
@@ -115,15 +114,28 @@ internal class StoreKitService: ObservableObject {
     func loadPurchasedTransactions() async {
         currentState = .loadingPurchases
         
-        // 获取所有产品的最新交易记录
-        var latestTransactions:[Transaction] = []
-        for product in allProducts {
-            if let latestTransaction = await Transaction.latest(for: product.id) {
-                switch latestTransaction {
-                case .verified(let transaction):
+        // 使用 TaskGroup 并行获取所有产品的最新交易记录
+        var latestTransactions: [Transaction] = []
+        await withTaskGroup(of: Transaction?.self) { group in
+            // 为每个产品ID创建任务
+            for productId in config.productIds {
+                group.addTask {
+                    if let latestTransaction = await Transaction.latest(for: productId) {
+                        switch latestTransaction {
+                        case .verified(let transaction):
+                            return transaction
+                        case .unverified:
+                            return nil
+                        }
+                    }
+                    return nil
+                }
+            }
+            
+            // 收集所有结果
+            for await transaction in group {
+                if let transaction = transaction {
                     latestTransactions.append(transaction)
-                default:
-                    break
                 }
             }
         }
@@ -215,16 +227,12 @@ internal class StoreKitService: ObservableObject {
                     // 打印详细的交易信息
                     await printTransactionDetails(transaction)
                     
-                    // 如果是消耗品，立即完成交易
-                    if product.type == .consumable {
-                        await transaction.finish()
-                    }
+                    // 先完成交易
+                    await transaction.finish()
                     
-                    await loadPurchasedTransactions()
-                    
-                    // 非消耗品和订阅在 loadPurchasedTransactions 后完成
+                    // 然后刷新购买列表（消耗品不需要）
                     if product.type != .consumable {
-                        await transaction.finish()
+                        await loadPurchasedTransactions()
                     }
                     
                     await MainActor.run {
@@ -393,6 +401,8 @@ internal class StoreKitService: ObservableObject {
                 do {
                     let transaction = try self.verifyPurchase(result)
                     
+                    await printTransactionDetails(transaction)
+                    
                     // 检查是否退款或撤销
                     if transaction.revocationDate != nil {
                         await MainActor.run {
@@ -479,7 +489,7 @@ extension StoreKitService{
                 try await AppStore.showManageSubscriptions()
                 
                 // 订阅管理界面关闭后，刷新订阅状态
-                await refreshSubscriptionStatus()
+                await loadPurchasedTransactions()
                 
                 return true
             } catch {
@@ -494,6 +504,38 @@ extension StoreKitService{
         #else
         openSubscriptionManagement()
         return false
+        #endif
+    }
+    
+    /// 显示优惠代码兑换界面（iOS 16.0+）
+    /// - Throws: StoreKitError 如果显示失败
+    /// - Note: 兑换后的交易会通过 Transaction.updates 发出
+    @MainActor
+    @available(iOS 16.0, visionOS 1.0, *)
+    @available(macOS, unavailable)
+    @available(watchOS, unavailable)
+    @available(tvOS, unavailable)
+    func presentOfferCodeRedeemSheet() async throws {
+        #if os(iOS)
+        // 获取当前的 windowScene
+        let windowScene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        
+        guard let windowScene = windowScene else {
+            throw StoreKitError.unknownError
+        }
+        
+        do {
+            try await AppStore.presentOfferCodeRedeemSheet(in: windowScene)
+            // 兑换后的交易会通过 Transaction.updates 自动处理
+            // 这里可以刷新购买列表以确保数据同步
+            await loadPurchasedTransactions()
+        } catch {
+            throw StoreKitError.purchaseFailed(error)
+        }
+        #else
+        throw StoreKitError.unknownError
         #endif
     }
 }
@@ -518,11 +560,6 @@ extension StoreKitService{
         delegate?.service(self, didUpdateState: state)
     }
     
-    /// 通知订阅状态变化（在主线程执行）
-    @MainActor
-    private func notifySubscriptionStatusChanged(_ status: Product.SubscriptionInfo.RenewalState?) {
-        delegate?.service(self, didUpdateSubscriptionStatus: status)
-    }
 }
 
 //MARK: 打印调试方法
