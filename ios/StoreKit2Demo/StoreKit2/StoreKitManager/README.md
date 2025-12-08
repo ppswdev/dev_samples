@@ -59,28 +59,195 @@ class MyStoreManager: StoreKitDelegate {
     
     // MARK: - StoreKitDelegate
     
+    /// 状态更新回调 - 处理所有状态变化
     func storeKit(_ manager: StoreKitManager, didUpdateState state: StoreKitState) {
         switch state {
+        case .idle:
+            print("StoreKit 空闲状态")
+            
+        case .loadingProducts:
+            print("正在加载产品...")
+            // 显示加载指示器
+            
         case .productsLoaded(let products):
             print("产品加载成功: \(products.count) 个")
+            // 更新UI显示产品列表
+            
+        case .loadingPurchases:
+            print("正在加载已购买产品...")
+            // 显示加载指示器
+            
+        case .purchasesLoaded:
+            print("已购买产品加载完成")
+            // 更新已购买状态UI
+            
+        case .purchasing(let productId):
+            print("正在购买: \(productId)")
+            // 显示购买进度，禁用购买按钮
+            
         case .purchaseSuccess(let productId):
             print("购买成功: \(productId)")
-            // 解锁功能
+            // 解锁功能，显示成功提示
+            unlockFeature(for: productId)
+            
+        case .purchasePending(let productId):
+            print("购买待处理: \(productId)")
+            // 提示用户等待处理（如需要家长批准）
+            
+        case .purchaseCancelled(let productId):
+            print("用户取消购买: \(productId)")
+            // 恢复购买按钮状态
+            
         case .purchaseFailed(let productId, let error):
             print("购买失败: \(productId), 错误: \(error.localizedDescription)")
+            // 显示错误提示，恢复购买按钮状态
+            
         case .subscriptionStatusChanged(let status):
             print("订阅状态变化: \(status)")
-        default:
-            break
+            // 根据状态更新订阅相关UI
+            updateSubscriptionUI(status: status)
+            
+        case .restoringPurchases:
+            print("正在恢复购买...")
+            // 显示恢复购买进度
+            
+        case .restorePurchasesSuccess:
+            print("恢复购买成功")
+            // 显示成功提示，刷新已购买状态
+            
+        case .restorePurchasesFailed(let error):
+            print("恢复购买失败: \(error.localizedDescription)")
+            // 显示错误提示
+            
+        case .purchaseRefunded(let productId):
+            print("购买已退款: \(productId)")
+            // 撤销功能，通知用户
+            
+        case .purchaseRevoked(let productId):
+            print("购买已撤销: \(productId)")
+            // 撤销功能，通知用户
+            
+        case .subscriptionCancelled(let productId):
+            print("订阅已取消: \(productId)")
+            // 更新订阅状态UI
+            
+        case .error(let error):
+            print("发生错误: \(error.localizedDescription)")
+            // 显示错误提示
         }
     }
     
+    /// 产品加载成功回调
     func storeKit(_ manager: StoreKitManager, didLoadProducts products: [Product]) {
+        print("产品加载成功回调: \(products.count) 个产品")
+        
+        // 按类型分类处理
+        let nonConsumables = products.filter { $0.type == .nonConsumable }
+        let consumables = products.filter { $0.type == .consumable }
+        let subscriptions = products.filter { $0.type == .autoRenewable }
+        
+        print("非消耗品: \(nonConsumables.count) 个")
+        print("消耗品: \(consumables.count) 个")
+        print("订阅产品: \(subscriptions.count) 个")
+        
         // 更新UI显示产品列表
+        updateProductsUI(products: products)
     }
     
+    /// 已购买产品更新回调
     func storeKit(_ manager: StoreKitManager, didUpdatePurchasedProducts products: [Product]) {
-        // 更新已购买状态
+        print("已购买产品更新: \(products.count) 个")
+        
+        // 检查特定产品是否已购买
+        let hasPremium = products.contains { $0.id == "premium.lifetime" }
+        if hasPremium {
+            print("用户已购买高级版")
+            unlockPremiumFeatures()
+        }
+        
+        // 更新已购买状态UI
+        updatePurchasedProductsUI(products: products)
+    }
+    
+    /// 订阅状态变化回调
+    func storeKit(_ manager: StoreKitManager, didUpdateSubscriptionStatus status: Product.SubscriptionInfo.RenewalState?) {
+        if let status = status {
+            switch status {
+            case .subscribed:
+                print("订阅状态: 已订阅")
+                // 解锁订阅功能
+                unlockSubscriptionFeatures()
+                
+            case .expired:
+                print("订阅状态: 已过期")
+                // 禁用订阅功能
+                disableSubscriptionFeatures()
+                
+            case .inBillingRetryPeriod:
+                print("订阅状态: 计费重试期")
+                // 提示用户更新支付方式
+                showBillingRetryAlert()
+                
+            case .inGracePeriod:
+                print("订阅状态: 宽限期")
+                // 保持功能可用，但提示用户
+                showGracePeriodAlert()
+                
+            case .revoked:
+                print("订阅状态: 已撤销")
+                // 禁用订阅功能
+                disableSubscriptionFeatures()
+            }
+        } else {
+            print("订阅状态: 无订阅")
+            // 禁用订阅功能
+            disableSubscriptionFeatures()
+        }
+        
+        // 更新订阅状态UI
+        updateSubscriptionStatusUI(status: status)
+    }
+    
+    // MARK: - 辅助方法
+    
+    private func unlockFeature(for productId: String) {
+        // 根据产品ID解锁相应功能
+    }
+    
+    private func updateProductsUI(products: [Product]) {
+        // 更新产品列表UI
+    }
+    
+    private func updatePurchasedProductsUI(products: [Product]) {
+        // 更新已购买产品UI
+    }
+    
+    private func updateSubscriptionUI(status: Product.SubscriptionInfo.RenewalState) {
+        // 更新订阅UI
+    }
+    
+    private func updateSubscriptionStatusUI(status: Product.SubscriptionInfo.RenewalState?) {
+        // 更新订阅状态UI
+    }
+    
+    private func unlockPremiumFeatures() {
+        // 解锁高级功能
+    }
+    
+    private func unlockSubscriptionFeatures() {
+        // 解锁订阅功能
+    }
+    
+    private func disableSubscriptionFeatures() {
+        // 禁用订阅功能
+    }
+    
+    private func showBillingRetryAlert() {
+        // 显示计费重试提示
+    }
+    
+    private func showGracePeriodAlert() {
+        // 显示宽限期提示
     }
 }
 ```
@@ -88,23 +255,258 @@ class MyStoreManager: StoreKitDelegate {
 ### 3. 使用闭包方式
 
 ```swift
-func setupStore() {
-    let config = StoreKitConfig(productIds: ["premium.lifetime"])
-    
-    StoreKitManager.shared.onStateChanged = { state in
-        switch state {
-        case .purchaseSuccess(let productId):
-            print("购买成功: \(productId)")
-        default:
-            break
+class MyStoreViewController {
+    func setupStore() {
+        let config = StoreKitConfig(
+            productIds: ["premium.lifetime", "subscription.monthly"]
+        )
+        
+        // 配置状态变化回调 - 处理所有状态
+        StoreKitManager.shared.onStateChanged = { [weak self] state in
+            guard let self = self else { return }
+            
+            switch state {
+            case .idle:
+                print("StoreKit 空闲状态")
+                
+            case .loadingProducts:
+                print("正在加载产品...")
+                self.showLoadingIndicator()
+                
+            case .productsLoaded(let products):
+                print("产品加载成功: \(products.count) 个")
+                self.hideLoadingIndicator()
+                self.updateProductsList(products)
+                
+            case .loadingPurchases:
+                print("正在加载已购买产品...")
+                self.showLoadingIndicator()
+                
+            case .purchasesLoaded:
+                print("已购买产品加载完成")
+                self.hideLoadingIndicator()
+                self.refreshPurchasedStatus()
+                
+            case .purchasing(let productId):
+                print("正在购买: \(productId)")
+                self.showPurchaseProgress(for: productId)
+                
+            case .purchaseSuccess(let productId):
+                print("购买成功: \(productId)")
+                self.hidePurchaseProgress()
+                self.showSuccessMessage("购买成功！")
+                self.unlockFeature(for: productId)
+                
+            case .purchasePending(let productId):
+                print("购买待处理: \(productId)")
+                self.showPendingMessage("购买正在处理中，请稍候...")
+                
+            case .purchaseCancelled(let productId):
+                print("用户取消购买: \(productId)")
+                self.hidePurchaseProgress()
+                self.showMessage("已取消购买")
+                
+            case .purchaseFailed(let productId, let error):
+                print("购买失败: \(productId), 错误: \(error.localizedDescription)")
+                self.hidePurchaseProgress()
+                self.showErrorMessage("购买失败: \(error.localizedDescription)")
+                
+            case .subscriptionStatusChanged(let status):
+                print("订阅状态变化: \(status)")
+                self.updateSubscriptionStatus(status)
+                
+            case .restoringPurchases:
+                print("正在恢复购买...")
+                self.showLoadingIndicator()
+                
+            case .restorePurchasesSuccess:
+                print("恢复购买成功")
+                self.hideLoadingIndicator()
+                self.showSuccessMessage("恢复购买成功！")
+                self.refreshPurchasedStatus()
+                
+            case .restorePurchasesFailed(let error):
+                print("恢复购买失败: \(error.localizedDescription)")
+                self.hideLoadingIndicator()
+                self.showErrorMessage("恢复购买失败: \(error.localizedDescription)")
+                
+            case .purchaseRefunded(let productId):
+                print("购买已退款: \(productId)")
+                self.showMessage("购买已退款，功能已撤销")
+                self.revokeFeature(for: productId)
+                
+            case .purchaseRevoked(let productId):
+                print("购买已撤销: \(productId)")
+                self.showMessage("购买已撤销，功能已禁用")
+                self.revokeFeature(for: productId)
+                
+            case .subscriptionCancelled(let productId):
+                print("订阅已取消: \(productId)")
+                self.showMessage("订阅已取消")
+                self.updateSubscriptionStatus(.expired)
+                
+            case .error(let error):
+                print("发生错误: \(error.localizedDescription)")
+                self.showErrorMessage("发生错误: \(error.localizedDescription)")
+            }
         }
+        
+        // 配置产品加载成功回调
+        StoreKitManager.shared.onProductsLoaded = { [weak self] products in
+            guard let self = self else { return }
+            
+            print("产品加载成功回调: \(products.count) 个产品")
+            
+            // 按类型分类
+            let nonConsumables = products.filter { $0.type == .nonConsumable }
+            let consumables = products.filter { $0.type == .consumable }
+            let subscriptions = products.filter { $0.type == .autoRenewable }
+            
+            print("非消耗品: \(nonConsumables.count) 个")
+            print("消耗品: \(consumables.count) 个")
+            print("订阅产品: \(subscriptions.count) 个")
+            
+            // 更新UI
+            self.updateProductsList(products)
+        }
+        
+        // 配置已购买产品更新回调
+        StoreKitManager.shared.onPurchasedProductsUpdated = { [weak self] products in
+            guard let self = self else { return }
+            
+            print("已购买产品更新: \(products.count) 个")
+            
+            // 检查特定产品
+            let hasPremium = products.contains { $0.id == "premium.lifetime" }
+            if hasPremium {
+                print("用户已购买高级版")
+                self.unlockPremiumFeatures()
+            }
+            
+            // 更新UI
+            self.updatePurchasedStatus(products)
+        }
+        
+        // 配置订阅状态变化回调
+        StoreKitManager.shared.onSubscriptionStatusChanged = { [weak self] status in
+            guard let self = self else { return }
+            
+            if let status = status {
+                switch status {
+                case .subscribed:
+                    print("订阅状态: 已订阅")
+                    self.unlockSubscriptionFeatures()
+                    
+                case .expired:
+                    print("订阅状态: 已过期")
+                    self.disableSubscriptionFeatures()
+                    
+                case .inBillingRetryPeriod:
+                    print("订阅状态: 计费重试期")
+                    self.showBillingRetryAlert()
+                    
+                case .inGracePeriod:
+                    print("订阅状态: 宽限期")
+                    self.showGracePeriodAlert()
+                    
+                case .revoked:
+                    print("订阅状态: 已撤销")
+                    self.disableSubscriptionFeatures()
+                }
+            } else {
+                print("订阅状态: 无订阅")
+                self.disableSubscriptionFeatures()
+            }
+            
+            // 更新订阅状态UI
+            self.updateSubscriptionStatusUI(status: status)
+        }
+        
+        // 启动 StoreKit
+        StoreKitManager.shared.configure(with: config)
     }
     
-    StoreKitManager.shared.onProductsLoaded = { products in
-        print("加载了 \(products.count) 个产品")
+    // MARK: - 辅助方法
+    
+    private func showLoadingIndicator() {
+        // 显示加载指示器
     }
     
-    StoreKitManager.shared.configure(with: config)
+    private func hideLoadingIndicator() {
+        // 隐藏加载指示器
+    }
+    
+    private func updateProductsList(_ products: [Product]) {
+        // 更新产品列表
+    }
+    
+    private func refreshPurchasedStatus() {
+        // 刷新已购买状态
+    }
+    
+    private func showPurchaseProgress(for productId: String) {
+        // 显示购买进度
+    }
+    
+    private func hidePurchaseProgress() {
+        // 隐藏购买进度
+    }
+    
+    private func showSuccessMessage(_ message: String) {
+        // 显示成功消息
+    }
+    
+    private func showMessage(_ message: String) {
+        // 显示消息
+    }
+    
+    private func showErrorMessage(_ message: String) {
+        // 显示错误消息
+    }
+    
+    private func showPendingMessage(_ message: String) {
+        // 显示待处理消息
+    }
+    
+    private func unlockFeature(for productId: String) {
+        // 解锁功能
+    }
+    
+    private func revokeFeature(for productId: String) {
+        // 撤销功能
+    }
+    
+    private func updateSubscriptionStatus(_ status: Product.SubscriptionInfo.RenewalState) {
+        // 更新订阅状态
+    }
+    
+    private func updateSubscriptionStatusUI(status: Product.SubscriptionInfo.RenewalState?) {
+        // 更新订阅状态UI
+    }
+    
+    private func unlockPremiumFeatures() {
+        // 解锁高级功能
+    }
+    
+    private func unlockSubscriptionFeatures() {
+        // 解锁订阅功能
+    }
+    
+    private func disableSubscriptionFeatures() {
+        // 禁用订阅功能
+    }
+    
+    private func showBillingRetryAlert() {
+        // 显示计费重试提示
+    }
+    
+    private func showGracePeriodAlert() {
+        // 显示宽限期提示
+    }
+    
+    private func updatePurchasedStatus(_ products: [Product]) {
+        // 更新已购买状态
+    }
 }
 ```
 
