@@ -193,11 +193,11 @@ public class StoreKitManager {
     /// 获取订阅详细信息
     /// - Parameter productId: 产品ID
     /// - Returns: 订阅信息，如果不是订阅产品则返回 nil
-    public func getSubscriptionInfo(for productId: String) async -> ValidSubscriptionInfo? {
+    public func getSubscriptionInfo(for productId: String) async -> SubscriptionInfo? {
         guard let product = allProducts.first(where: { $0.id == productId }) else {
             return nil
         }
-        return await ValidSubscriptionInfo.from(product)
+        return product.subscription
     }
     
     /// 获取订阅续订信息
@@ -240,15 +240,20 @@ public class StoreKitManager {
     /// - Throws: StoreKitError 如果显示失败
     /// - Note: 兑换后的交易会通过 Transaction.updates 发出
     @MainActor
-    @available(iOS 16.0, visionOS 1.0, *)
-    @available(macOS, unavailable)
-    @available(watchOS, unavailable)
-    @available(tvOS, unavailable)
-    public func presentOfferCodeRedeemSheet() async throws {
+    public func presentOfferCodeRedeemSheet() async -> Bool {
         guard let service = service else {
-            throw StoreKitError.serviceNotStarted
+            return false
         }
-        try await service.presentOfferCodeRedeemSheet()
+        if #available(iOS 16.0, visionOS 1.0, *){
+            do {
+                try await service.presentOfferCodeRedeemSheet()
+                return true
+            } catch {
+                return false
+            }
+        } else {
+            return false
+        }
     }
     
     // MARK: - 控制方法

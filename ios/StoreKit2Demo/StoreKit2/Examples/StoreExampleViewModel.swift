@@ -272,6 +272,14 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         return await StoreKitManager.shared.getTransactionHistory()
     }
     
+    /// 显示优惠代码兑换界面（iOS 16.0+）
+    func presentOfferCodeRedeemSheet() async {
+        let result =  await StoreKitManager.shared.presentOfferCodeRedeemSheet()
+        if(result){
+            await refreshPurchases()
+        }
+    }
+    
     // MARK: - 辅助方法
     
     

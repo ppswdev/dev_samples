@@ -71,19 +71,19 @@ struct StoreExampleView: View {
                         viewModel.restorePurchases()
                     }
                     
-                    // if #available(iOS 16.0, *) {
-                    //     Button(action: {
-                    //         Task {
-                    //             do {
-                    //                 try await viewModel.presentOfferCodeRedeemSheet()
-                    //             } catch {
-                    //                 print("优惠代码兑换失败: \(error)")
-                    //             }
-                    //         }
-                    //     }) {
-                    //         Text("优惠代码兑换")
-                    //     }
-                    // }
+                    if #available(iOS 16.0, *) {
+                        Button {
+                            Task {
+                                do {
+                                    try await viewModel.presentOfferCodeRedeemSheet()
+                                } catch {
+                                    print("优惠代码兑换失败: \(error)")
+                                }
+                            }
+                        } label: {
+                            Text("优惠代码兑换")
+                        }
+                    }
                     
                     Button("刷新已购买记录") {
                         Task {
