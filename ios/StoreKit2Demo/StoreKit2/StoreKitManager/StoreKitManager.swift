@@ -41,7 +41,7 @@ public class StoreKitManager {
     public var onProductsLoaded: (([Product]) -> Void)?
     
     /// 已购买产品更新回调
-    public var onPurchasedProductsUpdated: (([Product]) -> Void)?
+    public var onPurchasedTransactionsUpdated: (([Product]) -> Void)?
     
     /// 订阅状态变化回调
     public var onSubscriptionStatusChanged: ((RenewalState?) -> Void)?
@@ -166,7 +166,7 @@ public class StoreKitManager {
     
     /// 手动刷新产品列表
     public func refreshProducts() async {
-        await service?.retrieveProducts()
+        await service?.loadProducts()
     }
     
     /// 手动刷新已购买产品列表
@@ -276,14 +276,14 @@ extension StoreKitManager: StoreKitServiceDelegate {
     }
     
     @MainActor
-    func service(_ service: StoreKitService, didUpdatePurchasedProducts products: [Product]) {
-        purchasedProducts = products
+    func service(_ service: StoreKitService, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
+        purchasedProducts = efficient
         
         // 通知代理
-        delegate?.storeKit(self, didUpdatePurchasedProducts: products)
+        delegate?.storeKit(self, didUpdatePurchasedTransactions: efficient, latests: latests)
         
         // 通知闭包回调
-        onPurchasedProductsUpdated?(products)
+        onPurchasedTransactionsUpdated?(products)
     }
     
     @MainActor

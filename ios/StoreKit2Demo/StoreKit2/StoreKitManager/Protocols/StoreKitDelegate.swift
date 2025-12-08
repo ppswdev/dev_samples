@@ -27,7 +27,7 @@ public protocol StoreKitDelegate: AnyObject {
     /// - Parameters:
     ///   - manager: StoreKitManager 实例
     ///   - products: 已购买的产品列表
-    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedProducts products: [Product])
+    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction])
     
     /// 订阅状态变化回调
     /// - Parameters:
@@ -46,7 +46,7 @@ extension StoreKitDelegate {
         // 默认实现为空，子类可以选择性实现
     }
     
-    public func storeKit(_ manager: StoreKitManager, didUpdatePurchasedProducts products: [Product]) {
+    public func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
         // 默认实现为空，子类可以选择性实现
     }
     

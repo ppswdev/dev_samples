@@ -20,10 +20,12 @@ internal class StoreKitService: ObservableObject {
     private let config: StoreKitConfig
     weak var delegate: StoreKitServiceDelegate?
     
-    // 产品数据
+    /// 所有产品
     @Published private(set) var allProducts: [Product] = []
-    @Published private(set) var purchasedProducts: [Product] = []
-    @Published private(set) var subscriptionStatus: Product.SubscriptionInfo.RenewalState?
+    /// 所有有效的非消耗和订阅交易记录集合
+    @Published private(set) var purchasedTransactions: [Transaction] = []
+    /// 每个产品的最新交易记录集合
+    @Published private(set) var latestTransactions: [Transaction] = []
     
     // 后台任务
     private var transactionListener: Task<Void, Error>?
@@ -41,7 +43,7 @@ internal class StoreKitService: ObservableObject {
             let state = currentState
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                await self.notifyStateChanged(state)
+                self.notifyStateChanged(state)
             }
         }
     }
@@ -65,8 +67,9 @@ internal class StoreKitService: ObservableObject {
         transactionListener = transactionStatusStream()
         
         Task {
-            await retrieveProducts()
-            await retrievePurchasedProducts()
+            await clearUnfinishedTransactions()
+            await loadProducts()
+            await loadPurchasedTransactions()
         }
     }
     
@@ -81,9 +84,9 @@ internal class StoreKitService: ObservableObject {
         cancellables.removeAll()
     }
     
-    /// 从商店获取产品
+    /// 从商店获取所有有效产品
     @MainActor
-    func retrieveProducts() async {
+    func loadProducts() async {
         currentState = .loadingProducts
         
         do {
@@ -99,80 +102,68 @@ internal class StoreKitService: ObservableObject {
                 products = sortByPrice(products)
             }
             
-            self.allProducts = products
             currentState = .productsLoaded(products)
-            // delegate 会在 didSet 中通过 notifyStateChanged 调用
-            // 这里直接调用 didLoadProducts
-            await notifyProductsLoaded(products)
-            
+            self.allProducts = products
         } catch {
             currentState = .error(error)
             print("无法从 App Store 获取产品: \(error)")
         }
     }
     
-    /// 获取已购买的产品
+    /// 获取所有有效的非消耗品和订阅交易信息集合
     @MainActor
-    func retrievePurchasedProducts() async {
+    func loadPurchasedTransactions() async {
         currentState = .loadingPurchases
         
-        var purchased: [Product] = []
-        
-        // 遍历用户已购买的产品
-        for await verificationResult in Transaction.currentEntitlements {
-            do {
-                let transaction = try verifyPurchase(verificationResult)
-                
-                // 检查产品类型并分配到正确的数组
-                switch transaction.productType {
-                case .nonConsumable:
-                    if let product = allProducts.first(where: { $0.id == transaction.productID }) {
-                        purchased.append(product)
-                    }
-                    
-                case .nonRenewable:
-                    if let product = allProducts.first(where: { $0.id == transaction.productID }) {
-                        // 检查过期时间
-                        if let expirationDays = config.nonRenewableExpirationDays {
-                            let currentDate = Date()
-                            guard let expirationDate = Calendar(identifier: .gregorian).date(
-                                byAdding: DateComponents(day: expirationDays),
-                                to: transaction.purchaseDate) else {
-                                continue
-                            }
-                            
-                            if currentDate < expirationDate {
-                                purchased.append(product)
-                            }
-                        } else {
-                            // 永不过期
-                            purchased.append(product)
-                        }
-                    }
-                    
-                case .autoRenewable:
-                    if let product = allProducts.first(where: { $0.id == transaction.productID }) {
-                        purchased.append(product)
-                    }
-                    
+        // 获取所有产品的最新交易记录
+        var latestTransactions:[Transaction] = []
+        for product in allProducts {
+            if let latestTransaction = await Transaction.latest(for: product.id) {
+                switch latestTransaction {
+                case .verified(let transaction):
+                    latestTransactions.append(transaction)
                 default:
                     break
                 }
-            } catch {
-                print("交易验证失败: \(error)")
             }
         }
+        self.latestTransactions = latestTransactions
+
+        // 将当前有效记录并转换成 purchasedTransactions
+        var purchasedTransactions: [Transaction] = []
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result {
+                purchasedTransactions.append(transaction)
+            }
+        }
+        self.purchasedTransactions = purchasedTransactions
         
-        self.purchasedProducts = purchased
         currentState = .purchasesLoaded
-        // delegate 会在 didSet 中通过 notifyStateChanged 调用
-        // 这里直接调用 didUpdatePurchasedProducts
-        await notifyPurchasedProductsUpdated(purchased)
-        
-        // 更新订阅状态
-        if let firstAutoRenewable = allProducts.first(where: { $0.type == .autoRenewable }) {
-            subscriptionStatus = try? await firstAutoRenewable.subscription?.status.first?.state
-            await notifySubscriptionStatusChanged(subscriptionStatus)
+    }
+
+    /// 完成所有未完成的交易记录
+    @MainActor
+    func clearUnfinishedTransactions() async {
+        for await result in Transaction.unfinished {
+            do {
+                // 使用统一的验证方法
+                let transaction = try verifyPurchase(result)
+                
+                // 验证成功，完成交易
+                await transaction.finish()
+                print("未完成交易，完成交易处理: \(transaction.productID)")
+                
+            } catch {
+                // 验证失败，记录错误但不完成交易
+                if case .unverified(let transaction, _) = result {
+                    print("未完成交易，交易验证失败，产品ID: \(transaction.productID) 错误\(error.localizedDescription)")
+                    
+                    // 更新状态
+                    currentState = .error(StoreKitError.verificationFailed)
+                }
+                
+                // 注意：验证失败时不要调用 finish()
+            }
         }
     }
     
@@ -229,9 +220,9 @@ internal class StoreKitService: ObservableObject {
                         await transaction.finish()
                     }
                     
-                    await retrievePurchasedProducts()
+                    await loadPurchasedTransactions()
                     
-                    // 非消耗品和订阅在 retrievePurchasedProducts 后完成
+                    // 非消耗品和订阅在 loadPurchasedTransactions 后完成
                     if product.type != .consumable {
                         await transaction.finish()
                     }
@@ -285,7 +276,7 @@ internal class StoreKitService: ObservableObject {
             /// - 重要提示：此操作会提示用户进行身份验证，仅在用户交互时调用此函数。
             /// - 异常情况：如果用户身份验证不成功，或者 StoreKit 无法连接到 App Store。
             try await AppStore.sync()
-            await retrievePurchasedProducts()
+            await loadPurchasedTransactions()
             currentState = .restorePurchasesSuccess
         } catch {
             currentState = .restorePurchasesFailed(error)
@@ -293,7 +284,22 @@ internal class StoreKitService: ObservableObject {
         }
     }
     
-    /// 获取交易历史
+    /// 刷新同步最新的订阅信息
+    @MainActor
+    func refreshPurchasesSync() async {
+        // 同步 App Store 的购买状态
+        do {
+            try await AppStore.sync()
+        } catch {
+            print("同步 App Store 状态失败: \(error)")
+        }
+        
+        // 重新获取已购买产品（会更新订阅状态）
+        await loadPurchasedTransactions()
+    }
+    
+    
+    /// 获取所有或指定产品ID的交易历史记录
     func getTransactionHistory(for productId: String? = nil) async -> [TransactionHistory] {
         var histories: [TransactionHistory] = []
         
@@ -332,7 +338,7 @@ internal class StoreKitService: ObservableObject {
         return histories.sorted(by: { $0.purchaseDate > $1.purchaseDate })
     }
     
-    /// 获取消耗品的购买历史
+    /// 获取消耗品的购买历史记录
     func getConsumablePurchaseHistory(for productId: String) async -> [TransactionHistory] {
         let allHistory = await getTransactionHistory(for: productId)
         return allHistory.filter { history in
@@ -340,16 +346,85 @@ internal class StoreKitService: ObservableObject {
         }
     }
     
-    /// 获取订阅详细信息
-    func getSubscriptionInfo(for productId: String) async -> SubscriptionInfo? {
-        guard let product = allProducts.first(where: { $0.id == productId }),
-              product.type == .autoRenewable else {
-            return nil
-        }
+  
+    // MARK: - 私有方法
+
+    /// 设置订阅者
+    private func setupSubscribers() {
+        // 监听产品变化
+        $allProducts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] products in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.notifyProductsLoaded(products)
+                }
+            }
+            .store(in: &cancellables)
         
-        return product.subscription
+        // 监听已购买产品变化
+        $purchasedTransactions
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] transactions in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    self.notifyPurchasedTransactionsUpdated(transactions, self.latestTransactions)
+                }
+            }
+            .store(in: &cancellables)
     }
     
+    /// 验证购买
+    private func verifyPurchase<T>(_ verificationResult: VerificationResult<T>) throws -> T {
+        switch verificationResult {
+        case .unverified(_, let error):
+            throw StoreKitError.verificationFailed
+        case .verified(let result):
+            return result
+        }
+    }
+    
+    /// 监听交易状态流
+    private func transactionStatusStream() -> Task<Void, Error> {
+        return Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            for await result in Transaction.updates {
+                do {
+                    let transaction = try self.verifyPurchase(result)
+                    
+                    // 检查是否退款或撤销
+                    if transaction.revocationDate != nil {
+                        await MainActor.run {
+                            if transaction.productType == .autoRenewable {
+                                self.currentState = .subscriptionCancelled(transaction.productID)
+                            } else {
+                                // 有撤销日期通常表示退款
+                                self.currentState = .purchaseRefunded(transaction.productID)
+                            }
+                        }
+                    }
+                    
+                    await self.loadPurchasedTransactions()
+                    
+                    await transaction.finish()
+                } catch {
+                    print("交易处理失败: \(error)")
+                }
+            }
+        }
+    }
+    
+    /// 按价格排序产品
+    private func sortByPrice(_ products: [Product]) -> [Product] {
+        products.sorted(by: { $0.price < $1.price })
+    }
+    
+   
+}
+
+//MARK: 订阅管理
+extension StoreKitService{
     /// 打开订阅管理页面（使用 URL）
     @MainActor
     func openSubscriptionManagement() {
@@ -379,8 +454,7 @@ internal class StoreKitService: ObservableObject {
                 if let windowScene = windowScene {
                     try await AppStore.showManageSubscriptions(in: windowScene)
                     
-                    // 订阅管理界面关闭后，刷新订阅状态
-                    await refreshSubscriptionStatus()
+                    await loadPurchasedTransactions()
                     
                     return true
                 } else {
@@ -422,38 +496,21 @@ internal class StoreKitService: ObservableObject {
         return false
         #endif
     }
-    
-    /// 取消订阅（显示应用内订阅管理界面）
-    /// - Parameter productId: 产品ID（可选，如果提供则直接定位到该订阅）
-    /// - Returns: 是否成功显示管理界面
+}
+
+//MARK: 代理通知
+extension StoreKitService{
+    /// 通知产品加载（在主线程执行）
     @MainActor
-    func cancelSubscription(for productId: String? = nil) async -> Bool {
-        // 优先使用应用内订阅管理界面
-        let success = await showManageSubscriptionsSheet()
-        
-        if !success {
-            // 如果应用内界面不可用，则打开 URL
-            openSubscriptionManagement()
-        }
-        
-        return success
+    private func notifyProductsLoaded(_ products: [Product]) {
+        delegate?.service(self, didLoadProducts: products)
     }
     
-    /// 刷新订阅状态（同步最新的订阅信息）
+    /// 通知已购买交易订单更新（在主线程执行）
     @MainActor
-    func refreshSubscriptionStatus() async {
-        // 同步 App Store 的购买状态
-        do {
-            try await AppStore.sync()
-        } catch {
-            print("同步 App Store 状态失败: \(error)")
-        }
-        
-        // 重新获取已购买产品（会更新订阅状态）
-        await retrievePurchasedProducts()
+    private func notifyPurchasedTransactionsUpdated(_ efficient: [Transaction], _ latests: [Transaction]) {
+        delegate?.service(self, didUpdatePurchasedTransactions: efficient, latests: latests)
     }
-    
-    // MARK: - 私有方法
     
     /// 通知状态变化（在主线程执行）
     @MainActor
@@ -461,110 +518,15 @@ internal class StoreKitService: ObservableObject {
         delegate?.service(self, didUpdateState: state)
     }
     
-    /// 通知产品加载（在主线程执行）
-    @MainActor
-    private func notifyProductsLoaded(_ products: [Product]) {
-        delegate?.service(self, didLoadProducts: products)
-    }
-    
-    /// 通知已购买产品更新（在主线程执行）
-    @MainActor
-    private func notifyPurchasedProductsUpdated(_ products: [Product]) {
-        delegate?.service(self, didUpdatePurchasedProducts: products)
-    }
-    
     /// 通知订阅状态变化（在主线程执行）
     @MainActor
     private func notifySubscriptionStatusChanged(_ status: Product.SubscriptionInfo.RenewalState?) {
         delegate?.service(self, didUpdateSubscriptionStatus: status)
     }
-    
-    /// 设置订阅者
-    private func setupSubscribers() {
-        // 监听产品变化
-        $allProducts
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] products in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    self.notifyProductsLoaded(products)
-                }
-            }
-            .store(in: &cancellables)
-        
-        // 监听已购买产品变化
-        $purchasedProducts
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] products in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    self.notifyPurchasedProductsUpdated(products)
-                }
-            }
-            .store(in: &cancellables)
-        
-        // 监听订阅状态变化
-        $subscriptionStatus
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
-                guard let self = self else { return }
-                Task { @MainActor in
-                    self.notifySubscriptionStatusChanged(status)
-                }
-            }
-            .store(in: &cancellables)
-    }
-    
-    /// 验证购买
-    private func verifyPurchase<T>(_ verificationResult: VerificationResult<T>) throws -> T {
-        switch verificationResult {
-        case .unverified(_, let error):
-            throw StoreKitError.verificationFailed
-        case .verified(let result):
-            return result
-        }
-    }
-    
-    /// 监听交易状态流
-    private func transactionStatusStream() -> Task<Void, Error> {
-        return Task.detached { [weak self] in
-            guard let self = self else { return }
-            
-            for await result in Transaction.updates {
-                do {
-                    let transaction = try self.verifyPurchase(result)
-                    
-                    // 检查是否退款或撤销
-                    if transaction.revocationDate != nil {
-                        await MainActor.run {
-                            if transaction.productType == .autoRenewable {
-                                self.currentState = .subscriptionCancelled(transaction.productID)
-                            } else {
-                                // 有撤销日期通常表示退款
-                                self.currentState = .purchaseRefunded(transaction.productID)
-                            }
-                        }
-                    }
-                    
-                    await MainActor.run {
-                        Task {
-                            await self.retrievePurchasedProducts()
-                        }
-                    }
-                    
-                    await transaction.finish()
-                } catch {
-                    print("交易处理失败: \(error)")
-                }
-            }
-        }
-    }
-    
-    /// 按价格排序产品
-    private func sortByPrice(_ products: [Product]) -> [Product] {
-        products.sorted(by: { $0.price < $1.price })
-    }
-    
+}
+
+//MARK: 打印调试方法
+extension StoreKitService{
     private  func printProductDetails(_ product:Product) async{
         // 时间格式化为东八区（北京时间）
         let beijingTimeZone = TimeZone(secondsFromGMT: 8 * 3600) ?? .current
@@ -752,7 +714,12 @@ internal class StoreKitService: ObservableObject {
         if let revocationReason = transaction.revocationReason {
             print("   - 撤销原因: \(revocationReason)") // 退款/撤销的原因代码
         }
-        print("   - 购买原因: \(transaction.reason.rawValue)") // 购买原因（purchased/upgraded/renewed等）
+        if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *){
+            // 购买原因（purchased/upgraded/renewed等）
+            print("   - 购买理由: \(transaction.reason)")
+        }else{
+            print("   - 购买理由: 无")
+        }
         print("   - 是否升级: \(transaction.isUpgraded)") // 是否为升级购买
         
         // 购买数量
@@ -864,4 +831,3 @@ internal class StoreKitService: ObservableObject {
         print("")
     }
 }
-

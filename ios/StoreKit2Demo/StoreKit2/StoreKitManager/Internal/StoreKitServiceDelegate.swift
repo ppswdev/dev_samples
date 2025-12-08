@@ -18,8 +18,8 @@ internal protocol StoreKitServiceDelegate: AnyObject {
     /// 产品加载成功
     func service(_ service: StoreKitService, didLoadProducts products: [Product])
     
-    /// 已购买产品更新
-    func service(_ service: StoreKitService, didUpdatePurchasedProducts products: [Product])
+    /// 已购买交易订单更新
+    func service(_ service: StoreKitService, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction])
     
     /// 订阅状态变化
     func service(_ service: StoreKitService, didUpdateSubscriptionStatus status: Product.SubscriptionInfo.RenewalState?)

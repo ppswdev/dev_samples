@@ -149,7 +149,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         self.products = products
     }
     
-    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedProducts products: [Product]) {
+    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions products: [Product]) {
         self.purchasedProducts = products
     }
     
