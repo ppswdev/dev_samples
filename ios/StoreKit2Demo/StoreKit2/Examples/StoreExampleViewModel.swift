@@ -37,6 +37,11 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         "com.ppswdev.store.inapp.yearlyvip"
     ]
     
+    private let lifetimeIds = [
+        "com.ppswdev.store.lifetimevip",
+        "com.ppswdev.store.lifetimevip2",
+    ]
+    
     init() {
         setupStoreKit()
     }
@@ -45,6 +50,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     private func setupStoreKit() {
         let config = StoreKitConfig(
             productIds: productIds,
+            lifetimeIds: lifetimeIds,
             nonRenewableExpirationDays: 30, // 非续订订阅30天过期
             autoSortProducts: true
         )

@@ -149,7 +149,30 @@
       "subscriptions" : [
         {
           "adHocOffers" : [
-
+            {
+              "internalID" : "6095930C",
+              "offerID" : "free1week",
+              "paymentMode" : "free",
+              "referenceName" : "限时免费",
+              "subscriptionPeriod" : "P1W"
+            },
+            {
+              "displayPrice" : "1.99",
+              "internalID" : "574B5C53",
+              "numberOfPeriods" : 1,
+              "offerID" : "payasyougo1week",
+              "paymentMode" : "payAsYouGo",
+              "referenceName" : "按需付费",
+              "subscriptionPeriod" : "P1W"
+            },
+            {
+              "displayPrice" : "5.99",
+              "internalID" : "4BF6A6FE",
+              "offerID" : "payupfront1month",
+              "paymentMode" : "payUpFront",
+              "referenceName" : "提前预付",
+              "subscriptionPeriod" : "P1M"
+            }
           ],
           "codeOffers" : [
 

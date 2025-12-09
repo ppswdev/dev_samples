@@ -1,4 +1,4 @@
-# StoreKitManager
+# StoreKit2Manager
 
 一个简洁、易用的 StoreKit2 封装库，提供统一的接口来管理应用内购买。
 
@@ -19,6 +19,9 @@
 - ✅ 订阅管理链接
 - ✅ 并发购买保护
 - ✅ 自动处理退款和撤销
+- ✅ 订阅产品国际化支持（标题、副标题、按钮文案）
+- ✅ 优惠代码兑换支持
+- ✅ 家庭共享检测
 
 ## 快速开始
 
@@ -34,15 +37,11 @@ let config = StoreKitConfig(
         "subscription.monthly",
         "subscription.yearly"
     ],
+    lifetimeIds: ["premium.lifetime"], // 终身会员产品ID
     nonRenewableExpirationDays: 365, // 非续订订阅过期天数
     autoSortProducts: true // 自动按价格排序
 )
 
-// 方式2: 从 plist 文件加载
-let config = try StoreKitConfig.fromPlist(named: "StoreKitConfig")
-
-// 方式3: 从 JSON 文件加载
-let config = try StoreKitConfig.fromJSON(named: "StoreKitConfig")
 ```
 
 ### 2. 使用代理方式
@@ -51,16 +50,17 @@ let config = try StoreKitConfig.fromJSON(named: "StoreKitConfig")
 class MyStoreManager: StoreKitDelegate {
     func setupStore() {
         let config = StoreKitConfig(
-            productIds: ["premium.lifetime", "subscription.monthly"]
+            productIds: ["premium.lifetime", "subscription.monthly"],
+            lifetimeIds: ["premium.lifetime"]
         )
         
-        StoreKitManager.shared.configure(with: config, delegate: self)
+        StoreKit2Manager.shared.configure(with: config, delegate: self)
     }
     
     // MARK: - StoreKitDelegate
     
     /// 状态更新回调 - 处理所有状态变化
-    func storeKit(_ manager: StoreKitManager, didUpdateState state: StoreKitState) {
+    func storeKit(_ manager: StoreKit2Manager, didUpdateState state: StoreKitState) {
         switch state {
         case .idle:
             print("StoreKit 空闲状态")
@@ -138,7 +138,7 @@ class MyStoreManager: StoreKitDelegate {
     }
     
     /// 产品加载成功回调
-    func storeKit(_ manager: StoreKitManager, didLoadProducts products: [Product]) {
+    func storeKit(_ manager: StoreKit2Manager, didLoadProducts products: [Product]) {
         print("产品加载成功回调: \(products.count) 个产品")
         
         // 按类型分类处理
@@ -154,58 +154,22 @@ class MyStoreManager: StoreKitDelegate {
         updateProductsUI(products: products)
     }
     
-    /// 已购买产品更新回调
-    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedProducts products: [Product]) {
-        print("已购买产品更新: \(products.count) 个")
+    /// 已购买交易更新回调
+    /// - Parameters:
+    ///   - efficient: 已购买的有效交易（当前有效的订阅等）
+    ///   - latests: 每个产品的最新交易记录
+    func storeKit(_ manager: StoreKit2Manager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
+        print("已购买交易更新: 有效交易 \(efficient.count) 个, 最新交易 \(latests.count) 个")
         
         // 检查特定产品是否已购买
-        let hasPremium = products.contains { $0.id == "premium.lifetime" }
+        let hasPremium = latests.contains { $0.productID == "premium.lifetime" }
         if hasPremium {
             print("用户已购买高级版")
             unlockPremiumFeatures()
         }
         
         // 更新已购买状态UI
-        updatePurchasedProductsUI(products: products)
-    }
-    
-    /// 订阅状态变化回调
-    func storeKit(_ manager: StoreKitManager, didUpdateSubscriptionStatus status: Product.SubscriptionInfo.RenewalState?) {
-        if let status = status {
-            switch status {
-            case .subscribed:
-                print("订阅状态: 已订阅")
-                // 解锁订阅功能
-                unlockSubscriptionFeatures()
-                
-            case .expired:
-                print("订阅状态: 已过期")
-                // 禁用订阅功能
-                disableSubscriptionFeatures()
-                
-            case .inBillingRetryPeriod:
-                print("订阅状态: 计费重试期")
-                // 提示用户更新支付方式
-                showBillingRetryAlert()
-                
-            case .inGracePeriod:
-                print("订阅状态: 宽限期")
-                // 保持功能可用，但提示用户
-                showGracePeriodAlert()
-                
-            case .revoked:
-                print("订阅状态: 已撤销")
-                // 禁用订阅功能
-                disableSubscriptionFeatures()
-            }
-        } else {
-            print("订阅状态: 无订阅")
-            // 禁用订阅功能
-            disableSubscriptionFeatures()
-        }
-        
-        // 更新订阅状态UI
-        updateSubscriptionStatusUI(status: status)
+        updatePurchasedTransactionsUI(efficient: efficient, latests: latests)
     }
     
     // MARK: - 辅助方法
@@ -218,16 +182,8 @@ class MyStoreManager: StoreKitDelegate {
         // 更新产品列表UI
     }
     
-    private func updatePurchasedProductsUI(products: [Product]) {
-        // 更新已购买产品UI
-    }
-    
-    private func updateSubscriptionUI(status: Product.SubscriptionInfo.RenewalState) {
-        // 更新订阅UI
-    }
-    
-    private func updateSubscriptionStatusUI(status: Product.SubscriptionInfo.RenewalState?) {
-        // 更新订阅状态UI
+    private func updatePurchasedTransactionsUI(efficient: [Transaction], latests: [Transaction]) {
+        // 更新已购买交易UI
     }
     
     private func unlockPremiumFeatures() {
@@ -258,11 +214,12 @@ class MyStoreManager: StoreKitDelegate {
 class MyStoreViewController {
     func setupStore() {
         let config = StoreKitConfig(
-            productIds: ["premium.lifetime", "subscription.monthly"]
+            productIds: ["premium.lifetime", "subscription.monthly"],
+            lifetimeIds: ["premium.lifetime"]
         )
         
         // 配置状态变化回调 - 处理所有状态
-        StoreKitManager.shared.onStateChanged = { [weak self] state in
+        StoreKit2Manager.shared.onStateChanged = { [weak self] state in
             guard let self = self else { return }
             
             switch state {
@@ -352,7 +309,7 @@ class MyStoreViewController {
         }
         
         // 配置产品加载成功回调
-        StoreKitManager.shared.onProductsLoaded = { [weak self] products in
+        StoreKit2Manager.shared.onProductsLoaded = { [weak self] products in
             guard let self = self else { return }
             
             print("产品加载成功回调: \(products.count) 个产品")
@@ -370,60 +327,25 @@ class MyStoreViewController {
             self.updateProductsList(products)
         }
         
-        // 配置已购买产品更新回调
-        StoreKitManager.shared.onPurchasedProductsUpdated = { [weak self] products in
+        // 配置已购买交易更新回调
+        StoreKit2Manager.shared.onPurchasedTransactionsUpdated = { [weak self] efficient, latests in
             guard let self = self else { return }
             
-            print("已购买产品更新: \(products.count) 个")
+            print("已购买交易更新: 有效交易 \(efficient.count) 个, 最新交易 \(latests.count) 个")
             
             // 检查特定产品
-            let hasPremium = products.contains { $0.id == "premium.lifetime" }
+            let hasPremium = latests.contains { $0.productID == "premium.lifetime" }
             if hasPremium {
                 print("用户已购买高级版")
                 self.unlockPremiumFeatures()
             }
             
             // 更新UI
-            self.updatePurchasedStatus(products)
-        }
-        
-        // 配置订阅状态变化回调
-        StoreKitManager.shared.onSubscriptionStatusChanged = { [weak self] status in
-            guard let self = self else { return }
-            
-            if let status = status {
-                switch status {
-                case .subscribed:
-                    print("订阅状态: 已订阅")
-                    self.unlockSubscriptionFeatures()
-                    
-                case .expired:
-                    print("订阅状态: 已过期")
-                    self.disableSubscriptionFeatures()
-                    
-                case .inBillingRetryPeriod:
-                    print("订阅状态: 计费重试期")
-                    self.showBillingRetryAlert()
-                    
-                case .inGracePeriod:
-                    print("订阅状态: 宽限期")
-                    self.showGracePeriodAlert()
-                    
-                case .revoked:
-                    print("订阅状态: 已撤销")
-                    self.disableSubscriptionFeatures()
-                }
-            } else {
-                print("订阅状态: 无订阅")
-                self.disableSubscriptionFeatures()
-            }
-            
-            // 更新订阅状态UI
-            self.updateSubscriptionStatusUI(status: status)
+            self.updatePurchasedStatus(efficient: efficient, latests: latests)
         }
         
         // 启动 StoreKit
-        StoreKitManager.shared.configure(with: config)
+        StoreKit2Manager.shared.configure(with: config)
     }
     
     // MARK: - 辅助方法
@@ -476,35 +398,7 @@ class MyStoreViewController {
         // 撤销功能
     }
     
-    private func updateSubscriptionStatus(_ status: Product.SubscriptionInfo.RenewalState) {
-        // 更新订阅状态
-    }
-    
-    private func updateSubscriptionStatusUI(status: Product.SubscriptionInfo.RenewalState?) {
-        // 更新订阅状态UI
-    }
-    
-    private func unlockPremiumFeatures() {
-        // 解锁高级功能
-    }
-    
-    private func unlockSubscriptionFeatures() {
-        // 解锁订阅功能
-    }
-    
-    private func disableSubscriptionFeatures() {
-        // 禁用订阅功能
-    }
-    
-    private func showBillingRetryAlert() {
-        // 显示计费重试提示
-    }
-    
-    private func showGracePeriodAlert() {
-        // 显示宽限期提示
-    }
-    
-    private func updatePurchasedStatus(_ products: [Product]) {
+    private func updatePurchasedStatus(efficient: [Transaction], latests: [Transaction]) {
         // 更新已购买状态
     }
 }
@@ -516,16 +410,16 @@ class MyStoreViewController {
 // 通过产品ID购买
 Task {
     do {
-        try await StoreKitManager.shared.purchase(productId: "premium.lifetime")
+        try await StoreKit2Manager.shared.purchase(productId: "premium.lifetime")
     } catch {
         print("购买失败: \(error)")
     }
 }
 
 // 通过产品对象购买
-if let product = StoreKitManager.shared.product(for: "premium.lifetime") {
+if let product = StoreKit2Manager.shared.product(for: "premium.lifetime") {
     Task {
-        await StoreKitManager.shared.purchase(product)
+        try await StoreKit2Manager.shared.purchase(product)
     }
 }
 ```
@@ -534,15 +428,23 @@ if let product = StoreKitManager.shared.product(for: "premium.lifetime") {
 
 ```swift
 // 检查是否已购买
-if StoreKitManager.shared.isPurchased(productId: "premium.lifetime") {
+if StoreKit2Manager.shared.isPurchased(productId: "premium.lifetime") {
     // 解锁功能
 }
 
-// 获取所有已购买的产品
-let purchased = StoreKitManager.shared.purchasedProducts
+// 检查是否通过家庭共享获得
+if StoreKit2Manager.shared.isFamilyShared(productId: "premium.lifetime") {
+    // 通过家庭共享获得
+}
 
-// 获取特定类型的已购买产品
-let subscriptions = StoreKitManager.shared.purchasedAutoRenewables
+// 获取所有已购买的有效交易
+let purchasedTransactions = StoreKit2Manager.shared.purchasedTransactions
+
+// 获取每个产品的最新交易
+let latestTransactions = StoreKit2Manager.shared.latestTransactions
+
+// 获取特定类型的已购买产品（从 allProducts 中筛选）
+let subscriptions = StoreKit2Manager.shared.autoRenewables
 ```
 
 ### 6. 恢复购买
@@ -551,11 +453,42 @@ let subscriptions = StoreKitManager.shared.purchasedAutoRenewables
 // 恢复购买
 Task {
     do {
-        try await StoreKitManager.shared.restorePurchases()
+        try await StoreKit2Manager.shared.restorePurchases()
         print("恢复购买成功")
     } catch {
         print("恢复购买失败: \(error)")
     }
+}
+```
+
+### 6.1. 订阅产品国际化
+
+```swift
+// 获取订阅产品标题
+let title = StoreKit2Manager.shared.productForVipTitle(
+    for: "subscription.monthly",
+    periodType: .month,
+    languageCode: "zh_Hans",
+    isShort: false
+)
+
+// 获取订阅产品副标题（异步）
+Task {
+    let subtitle = await StoreKit2Manager.shared.productForVipSubtitle(
+        for: "subscription.monthly",
+        periodType: .month,
+        languageCode: "zh_Hans"
+    )
+    print("副标题: \(subtitle)")
+}
+
+// 获取订阅按钮文案（异步）
+Task {
+    let buttonText = await StoreKit2Manager.shared.productForVipButtonText(
+        for: "subscription.monthly",
+        languageCode: "zh_Hans"
+    )
+    print("按钮文案: \(buttonText)")
 }
 ```
 
@@ -564,7 +497,7 @@ Task {
 ```swift
 // 获取所有交易历史
 Task {
-    let history = await StoreKitManager.shared.getTransactionHistory()
+    let history = await StoreKit2Manager.shared.getTransactionHistory()
     for transaction in history {
         print("产品: \(transaction.productId), 日期: \(transaction.purchaseDate)")
     }
@@ -572,25 +505,33 @@ Task {
 
 // 获取特定产品的交易历史
 Task {
-    let history = await StoreKitManager.shared.getTransactionHistory(for: "premium.lifetime")
+    let history = await StoreKit2Manager.shared.getTransactionHistory(for: "premium.lifetime")
 }
 
 // 获取消耗品的购买历史
 Task {
-    let consumableHistory = await StoreKitManager.shared.getConsumablePurchaseHistory(for: "consumable.coins")
+    let consumableHistory = await StoreKit2Manager.shared.getConsumablePurchaseHistory(for: "consumable.coins")
 }
 ```
 
 ### 8. 订阅详细信息
 
 ```swift
-// 获取订阅详细信息
+// 获取订阅详细信息（返回 Product.SubscriptionInfo）
 Task {
-    if let subscriptionInfo = await StoreKitManager.shared.getSubscriptionInfo(for: "subscription.monthly") {
-        print("续订日期: \(subscriptionInfo.renewalDate ?? Date())")
-        print("是否在试用期: \(subscriptionInfo.isInTrialPeriod)")
-        print("是否有效: \(subscriptionInfo.isValid)")
-        print("是否已过期: \(subscriptionInfo.isExpired)")
+    if let subscriptionInfo = await StoreKit2Manager.shared.getSubscriptionInfo(for: "subscription.monthly") {
+        // subscriptionInfo 是 Product.SubscriptionInfo 类型
+        // 可以访问 subscriptionPeriod, introductoryOffer, promotionalOffers 等属性
+        print("订阅周期: \(subscriptionInfo.subscriptionPeriod)")
+    }
+}
+
+// 获取订阅续订信息（包含续订状态、过期日期等）
+Task {
+    if let renewalInfo = await StoreKit2Manager.shared.getRenewalInfo(for: "subscription.monthly") {
+        print("是否自动续订: \(renewalInfo.willAutoRenew)")
+        print("过期日期: \(renewalInfo.expirationDate)")
+        print("续订日期: \(renewalInfo.renewalDate)")
     }
 }
 ```
@@ -601,26 +542,24 @@ Task {
 // 方式1: 显示应用内订阅管理界面（推荐，iOS 15.0+ / macOS 12.0+）
 // 注意：界面关闭后会自动刷新订阅状态
 Task {
-    let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
+    let success = await StoreKit2Manager.shared.showManageSubscriptionsSheet()
     if !success {
         // 如果应用内界面不可用，回退到 URL 方式
-        StoreKitManager.shared.openSubscriptionManagement()
+        StoreKit2Manager.shared.openSubscriptionManagement()
     }
 }
 
 // 方式2: 打开订阅管理页面（使用 URL，兼容所有版本）
-StoreKitManager.shared.openSubscriptionManagement()
+StoreKit2Manager.shared.openSubscriptionManagement()
 
-// 方式3: 取消订阅（显示应用内订阅管理界面）
-// 注意：界面关闭后会自动刷新订阅状态
+// 方式3: 手动检查订阅状态（获取最新状态）
+// 建议在以下时机调用：
+// - 应用启动时
+// - 应用进入前台时
+// - 用户打开订阅页面时
+// - 购买/恢复购买后
 Task {
-    await StoreKitManager.shared.cancelSubscription(for: "subscription.monthly")
-}
-
-// 方式4: 手动刷新订阅状态（获取最新状态）
-// 在用户取消订阅后，可以调用此方法获取最新的订阅状态
-Task {
-    await StoreKitManager.shared.refreshSubscriptionStatus()
+    await StoreKit2Manager.shared.checkSubscriptionStatus()
 }
 ```
 
@@ -628,26 +567,44 @@ Task {
 
 当用户取消订阅后，有几种方式获取最新的订阅状态：
 
-1. **自动刷新**：使用 `showManageSubscriptionsSheet()` 或 `cancelSubscription()` 时，界面关闭后会自动刷新订阅状态。
+1. **自动刷新**：使用 `showManageSubscriptionsSheet()` 时，界面关闭后会自动刷新订阅状态。
 
-2. **手动刷新**：调用 `refreshSubscriptionStatus()` 方法手动刷新：
+2. **手动检查**：调用 `checkSubscriptionStatus()` 方法手动检查订阅状态：
 
 ```swift
 Task {
-    await StoreKitManager.shared.refreshSubscriptionStatus()
+    await StoreKit2Manager.shared.checkSubscriptionStatus()
 }
 ```
 
-3. **实时监听**：通过 `StoreKitDelegate` 的 `storeKit(_:didUpdateSubscriptionStatus:)` 方法实时监听订阅状态变化。
+3. **实时监听**：通过 `StoreKitDelegate` 的 `storeKit(_:didUpdatePurchasedTransactions:latests:)` 方法实时监听交易变化。
 
-4. **查询订阅信息**：使用 `getSubscriptionInfo(for:)` 方法查询特定订阅的详细信息：
+4. **查询订阅信息**：使用 `getSubscriptionInfo(for:)` 或 `getRenewalInfo(for:)` 方法查询特定订阅的详细信息：
 
 ```swift
 Task {
-    if let info = await StoreKitManager.shared.getSubscriptionInfo(for: "subscription.monthly") {
-        print("订阅状态: \(info.renewalState)")
-        print("是否已取消: \(info.isCancelled)")
-        print("过期日期: \(info.expirationDate)")
+    // 获取订阅信息
+    if let subscriptionInfo = await StoreKit2Manager.shared.getSubscriptionInfo(for: "subscription.monthly") {
+        print("订阅周期: \(subscriptionInfo.subscriptionPeriod)")
+    }
+    
+    // 获取续订信息（包含状态）
+    if let renewalInfo = await StoreKit2Manager.shared.getRenewalInfo(for: "subscription.monthly") {
+        print("是否自动续订: \(renewalInfo.willAutoRenew)")
+        print("过期日期: \(renewalInfo.expirationDate)")
+    }
+}
+```
+
+### 9.1. 优惠代码兑换
+
+```swift
+// 显示优惠代码兑换界面（iOS 16.0+）
+Task {
+    let success = await StoreKit2Manager.shared.presentOfferCodeRedeemSheet()
+    if success {
+        // 兑换成功，可以刷新购买状态
+        await StoreKit2Manager.shared.refreshPurchases()
     }
 }
 ```
@@ -657,13 +614,22 @@ Task {
 ```swift
 // 刷新产品列表
 Task {
-    await StoreKitManager.shared.refreshProducts()
+    await StoreKit2Manager.shared.refreshProducts()
 }
 
-// 刷新已购买产品列表
+// 刷新已购买交易信息（包括有效的订阅交易和每个产品的最新交易）
 Task {
-    await StoreKitManager.shared.refreshPurchases()
+    await StoreKit2Manager.shared.refreshPurchases()
 }
+```
+
+### 11. 请求应用评价
+
+```swift
+// 请求应用评价（兼容 iOS 15.0+ 和 iOS 16.0+）
+// 注意：系统会根据用户的使用情况决定是否显示评价弹窗
+// 每个应用在每个版本中最多显示 3 次评价请求
+StoreKit2Manager.shared.requestReview()
 ```
 
 ## 配置文件格式
@@ -681,6 +647,10 @@ Task {
         <string>subscription.monthly</string>
         <string>subscription.yearly</string>
     </array>
+    <key>lifetimeIds</key>
+    <array>
+        <string>premium.lifetime</string>
+    </array>
     <key>nonRenewableExpirationDays</key>
     <integer>365</integer>
     <key>autoSortProducts</key>
@@ -697,6 +667,9 @@ Task {
         "premium.lifetime",
         "subscription.monthly",
         "subscription.yearly"
+    ],
+    "lifetimeIds": [
+        "premium.lifetime"
     ],
     "nonRenewableExpirationDays": 365,
     "autoSortProducts": true
@@ -746,21 +719,42 @@ public enum StoreKitError: Error {
 
 ## 数据模型
 
-### SubscriptionInfo（订阅信息）
+### SubscriptionPeriodType（订阅周期类型）
 
 ```swift
-public struct SubscriptionInfo {
-    let productId: String
-    let product: Product
-    let renewalState: RenewalState
-    let renewalDate: Date?
-    let isInTrialPeriod: Bool
-    let isInIntroductoryPricePeriod: Bool
-    let isCancelled: Bool
-    let isExpired: Bool  // 计算属性
-    let isValid: Bool    // 计算属性
-    // ...
+public enum SubscriptionPeriodType: String {
+    case week = "week"       // 周
+    case month = "month"     // 月
+    case year = "year"       // 年
+    case lifetime = "lifetime" // 终身
 }
+```
+
+### SubscriptionButtonType（订阅按钮类型）
+
+```swift
+public enum SubscriptionButtonType: String {
+    case standard = "standard"      // 标准订阅
+    case freeTrial = "freeTrial"     // 免费试用
+    case payUpFront = "payUpFront"  // 预付
+    case payAsYouGo = "payAsYouGo"  // 按需付费
+    case lifetime = "lifetime"      // 终身会员
+}
+```
+
+### SubscriptionInfo（订阅信息）
+
+`SubscriptionInfo` 是 `Product.SubscriptionInfo` 的类型别名，包含订阅产品的详细信息：
+
+```swift
+public typealias SubscriptionInfo = StoreKit.Product.SubscriptionInfo
+
+// 主要属性：
+// - subscriptionPeriod: 订阅周期
+// - introductoryOffer: 介绍性优惠
+// - promotionalOffers: 促销优惠数组
+// - subscriptionGroupID: 订阅组ID
+// 等等...
 ```
 
 ### TransactionHistory（交易历史）
@@ -782,17 +776,18 @@ public struct TransactionHistory {
 ## 架构说明
 
 ```text
-StoreKitManager (对外接口)
+StoreKit2Manager (对外接口)
     ↓
 StoreKitService (内部服务)
     ↓
 StoreKit API
 ```
 
-- **StoreKitManager**: 提供统一的对外接口，管理配置和回调
+- **StoreKit2Manager**: 提供统一的对外接口，管理配置和回调
 - **StoreKitService**: 内部服务层，处理与 StoreKit API 的交互
 - **Models**: 配置、状态、错误、订阅信息、交易历史等数据模型
 - **Protocols**: 代理协议定义
+- **Locals**: 订阅产品国际化支持（SubscriptionLocale）
 
 ## 高级功能
 
@@ -803,7 +798,7 @@ StoreKit API
 ```swift
 Task {
     do {
-        try await StoreKitManager.shared.purchase(productId: "premium.lifetime")
+        try await StoreKit2Manager.shared.purchase(productId: "premium.lifetime")
     } catch StoreKitError.purchaseInProgress {
         print("已有购买正在进行，请等待完成")
     }
@@ -816,10 +811,10 @@ Task {
 
 ```swift
 // 购买消耗品
-try await StoreKitManager.shared.purchase(productId: "consumable.coins")
+try await StoreKit2Manager.shared.purchase(productId: "consumable.coins")
 
 // 查询消耗品购买历史
-let history = await StoreKitManager.shared.getConsumablePurchaseHistory(for: "consumable.coins")
+let history = await StoreKit2Manager.shared.getConsumablePurchaseHistory(for: "consumable.coins")
 ```
 
 ### 自动处理退款和撤销
@@ -827,7 +822,7 @@ let history = await StoreKitManager.shared.getConsumablePurchaseHistory(for: "co
 库会自动监听交易状态变化，当发生退款或撤销时，会通过状态回调通知：
 
 ```swift
-func storeKit(_ manager: StoreKitManager, didUpdateState state: StoreKitState) {
+func storeKit(_ manager: StoreKit2Manager, didUpdateState state: StoreKitState) {
     switch state {
     case .purchaseRefunded(let productId):
         print("产品已退款: \(productId)")
@@ -854,16 +849,99 @@ func storeKit(_ manager: StoreKitManager, didUpdateState state: StoreKitState) {
 6. 消耗品购买后会立即完成交易，不会保留在 entitlements 中
 7. 恢复购买会同步所有已购买的产品，包括在其他设备上购买的
 8. 订阅取消需要通过系统设置完成，应用内只能打开设置页面
+9. `purchasedTransactions` 包含当前有效的交易（如活跃的订阅），`latestTransactions` 包含每个产品的最新交易记录
+10. 使用国际化功能时，确保传入正确的 `languageCode`（如 "zh_Hans"、"en" 等）
+11. 订阅产品的标题、副标题和按钮文案获取是异步的，在 SwiftUI 中使用 `.task` 修饰符加载
+12. 终身会员产品需要在配置中通过 `lifetimeIds` 指定，以便正确显示本地化文案
 
 ## 生命周期管理
 
 ```swift
 // 启动服务（在 configure 时自动启动）
-StoreKitManager.shared.configure(with: config, delegate: self)
+StoreKit2Manager.shared.configure(with: config, delegate: self)
 
 // 停止服务（释放资源）
-StoreKitManager.shared.stop()
+StoreKit2Manager.shared.stop()
 ```
+
+## 订阅产品国际化
+
+StoreKit2Manager 提供了完整的订阅产品国际化支持，包括标题、副标题和按钮文案的本地化。
+
+### 使用示例
+
+```swift
+// 在 SwiftUI 视图中使用
+struct SubscriptionProductRow: View {
+    let product: Product
+    @State private var customTitle: String = ""
+    @State private var customSubtitle: String = ""
+    @State private var customButtonText: String = "订阅"
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(customTitle.isEmpty ? product.displayName : customTitle)
+                .font(.headline)
+            
+            Text(customSubtitle.isEmpty ? product.description : customSubtitle)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Button(customButtonText) {
+                // 购买逻辑
+            }
+        }
+        .task {
+            await loadCustomContent()
+        }
+    }
+    
+    private func loadCustomContent() async {
+        let languageCode = SubscriptionLocale.currentLanguageCode()
+        let periodType = SubscriptionLocale.getPeriodType(from: product)
+        
+        // 加载标题（同步）
+        customTitle = StoreKit2Manager.shared.productForVipTitle(
+            for: product.id,
+            periodType: periodType,
+            languageCode: languageCode,
+            isShort: false
+        )
+        
+        // 加载副标题和按钮文案（异步，并发执行）
+        async let subtitleTask = StoreKit2Manager.shared.productForVipSubtitle(
+            for: product.id,
+            periodType: periodType,
+            languageCode: languageCode
+        )
+        
+        async let buttonTextTask = StoreKit2Manager.shared.productForVipButtonText(
+            for: product.id,
+            languageCode: languageCode
+        )
+        
+        let (subtitle, buttonText) = await (subtitleTask, buttonTextTask)
+        customSubtitle = subtitle
+        customButtonText = buttonText
+    }
+}
+```
+
+### 支持的语言
+
+- 简体中文 (zh_Hans)
+- 繁体中文 (zh_Hant)
+- 英语 (en)
+- 日语 (ja)
+- 韩语 (ko)
+- 以及其他多种语言
+
+### 功能特性
+
+- 自动识别订阅周期类型（周、月、年、终身）
+- 支持介绍性优惠和促销优惠的本地化描述
+- 根据支付模式（免费试用、预付、按需付费）显示不同的按钮文案
+- 自动格式化价格显示（支持不同地区的货币格式）
 
 ## 官方文档
 

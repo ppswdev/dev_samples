@@ -8,6 +8,23 @@
 import Foundation
 import StoreKit
 
+/// 订阅周期类型
+public enum SubscriptionPeriodType: String {
+    case week = "week"
+    case month = "month"
+    case year = "year"
+    case lifetime = "lifetime"
+}
+
+/// 订阅按钮文案类型
+public enum SubscriptionButtonType: String {
+    case standard = "standard"        // 标准订阅
+    case freeTrial = "freeTrial"      // 免费试用
+    case payUpFront = "payUpFront"    // 预付
+    case payAsYouGo = "payAsYouGo"    // 按需付费
+    case lifetime = "lifetime"        // 终身会员
+}
+
 /// 订阅信息类型别名
 public typealias SubscriptionInfo = StoreKit.Product.SubscriptionInfo
 
@@ -132,6 +149,12 @@ public class StoreKit2Manager {
         try await service.purchase(product)
     }
     
+    /// 恢复购买
+    /// - Throws: StoreKitError.restorePurchasesFailed 如果恢复失败
+    public func restorePurchases() async throws {
+        try await service?.restorePurchases()
+    }
+    
     // MARK: - 查询方法
     
     /// 检查产品是否已购买
@@ -158,6 +181,123 @@ public class StoreKit2Manager {
         return allProducts.first(where: { $0.id == productId })
     }
     
+    /// 获取VIP订阅产品的标题
+    /// - Parameter productId: 产品ID
+    /// - Parameter periodType: 周期类型：周，月，年，终身
+    /// - Parameter languageCode: 语言代码
+    /// - Parameter isShort: 是否短标题
+    /// - Returns: 本地化的产品标题
+    public func productForVipTitle(for productId: String, periodType: SubscriptionPeriodType , languageCode: String, isShort: Bool = false) -> String {
+        guard let product = product(for: productId) else {
+            return ""
+        }
+        return SubscriptionLocale.subscriptionTitle(
+            periodType: periodType,
+            languageCode: languageCode,
+            isShort: isShort
+        )
+    }
+    
+    /// 获取VIP订阅产品的副标题
+    /// - Parameter productId: 产品ID
+    /// - Returns: 本地化的产品副标题
+    public func productForVipSubtitle(for productId: String, periodType: SubscriptionPeriodType , languageCode: String) async -> String {
+        guard let product = product(for: productId) else {
+            return ""
+        }
+        
+        // 检查是否有自动续订
+        if let subscription = product.subscription {
+            // 是自动续订, 且有资格享受介绍性优惠
+            if await subscription.isEligibleForIntroOffer {
+                // 介绍性优惠：免费试用，随用随付，提前支付
+                if subscription.introductoryOffer != nil {
+                    return await SubscriptionLocale.introductoryOfferSubtitle(
+                        product: product,
+                        languageCode: languageCode
+                    )
+                }
+            } else {
+                // 促销优惠：免费试用，随用随付，提前支付（似乎有可以有多个促销优惠，后续完善，目前暂时只考虑只有1个的情况）
+                if !subscription.promotionalOffers.isEmpty {
+                    return await SubscriptionLocale.promotionalOfferSubtitle(
+                        product: product,
+                        languageCode: languageCode
+                    )
+                }
+            }
+        }
+        
+        // 如果是终生购买
+        if config?.lifetimeIds.contains(productId) == true {
+            return SubscriptionLocale.defaultSubtitle(
+                product: product,
+                periodType: SubscriptionPeriodType.lifetime,
+                languageCode: languageCode
+            )
+        }
+        //常规订阅
+        return SubscriptionLocale.defaultSubtitle(
+            product: product,
+            periodType: periodType,
+            languageCode: languageCode
+        )
+    }
+    
+    /// 获取产品的按钮文案
+    /// - Parameter productId: 产品ID
+    /// - Returns: 本地化的按钮文案
+    public func productForVipButtonText(for productId: String, languageCode: String) async -> String {
+        guard let product = product(for: productId) else {
+            return ""
+        }
+        
+        // 判断按钮类型
+        var buttonType: SubscriptionButtonType = .standard
+        
+        // 检查是否有自动续订
+        if let subscription = product.subscription {
+            //是自动续订, 且有资格享受介绍性优惠
+            if await subscription.isEligibleForIntroOffer{
+                //介绍性优惠：免费试用，随用随付，提前支付
+                if let introOffer = subscription.introductoryOffer {
+                    switch introOffer.paymentMode {
+                    case .freeTrial:
+                        buttonType = .freeTrial
+                    case .payUpFront: 
+                        buttonType = .payUpFront
+                    case .payAsYouGo:
+                        buttonType = .payAsYouGo
+                    default:
+                        buttonType = .standard
+                    }
+                }
+            }else{
+                // 促销优惠：免费试用，随用随付，提前支付（似乎有可以有多个促销优惠，后续完善，目前暂时只考虑只有1个的情况）
+                if let promotionalOffer = subscription.promotionalOffers.first {
+                    switch promotionalOffer.paymentMode {
+                    case .freeTrial:
+                        buttonType = .freeTrial
+                    case .payUpFront:
+                        buttonType = .payUpFront
+                    case .payAsYouGo:
+                        buttonType = .payAsYouGo
+                    default:
+                        buttonType = .standard
+                    }
+                }
+            }
+        }
+        //如果是终生购买
+        if config?.lifetimeIds.contains(productId) == true {
+            buttonType = .lifetime
+        }
+        
+        return SubscriptionLocale.subscriptionButtonText(
+            type: buttonType,
+            languageCode: languageCode
+        )
+    }
     // MARK: - 刷新方法
     
     /// 手动刷新产品列表
@@ -179,14 +319,6 @@ public class StoreKit2Manager {
     @MainActor
     public func checkSubscriptionStatus() async {
         await service?.checkSubscriptionStatusManually()
-    }
-    
-    // MARK: - 恢复购买
-    
-    /// 恢复购买
-    /// - Throws: StoreKitError.restorePurchasesFailed 如果恢复失败
-    public func restorePurchases() async throws {
-        try await service?.restorePurchases()
     }
     
     // MARK: - 交易历史
