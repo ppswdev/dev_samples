@@ -170,6 +170,17 @@ public class StoreKit2Manager {
         await service?.loadPurchasedTransactions()
     }
     
+    /// 手动检查订阅状态
+    /// - Note: 建议在以下时机调用：
+    ///   - 应用启动时
+    ///   - 应用进入前台时
+    ///   - 用户打开订阅页面时
+    ///   - 购买/恢复购买后
+    @MainActor
+    public func checkSubscriptionStatus() async {
+        await service?.checkSubscriptionStatusManually()
+    }
+    
     // MARK: - 恢复购买
     
     /// 恢复购买

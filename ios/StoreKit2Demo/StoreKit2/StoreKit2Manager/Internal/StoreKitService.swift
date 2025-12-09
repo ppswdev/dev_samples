@@ -36,6 +36,17 @@ internal class StoreKitService: ObservableObject {
     private var isPurchasing = false
     private let purchasingQueue = DispatchQueue(label: "com.storekit.purchasing")
     
+    //订阅状态监听相关属性
+    
+    /// 订阅状态缓存（产品ID -> 上次的订阅状态）
+    private var lastSubscriptionStatus: [String: Product.SubscriptionInfo.RenewalState] = [:]
+    
+    /// 续订信息缓存（产品ID -> 上次的续订信息）
+    private var lastRenewalInfo: [String: Product.SubscriptionInfo.RenewalInfo] = [:]
+    
+    /// 订阅状态检查间隔（秒），默认30秒
+    private let subscriptionCheckInterval: TimeInterval = 30
+    
     // 当前状态
     private var currentState: StoreKitState = .idle {
         didSet {
@@ -66,10 +77,16 @@ internal class StoreKitService: ObservableObject {
         
         transactionListener = transactionStatusStream()
         
+        // 启动订阅状态监听
+        startSubscriptionStatusListener()
+        
         Task {
             await clearUnfinishedTransactions()
             await loadProducts()
             await loadPurchasedTransactions()
+            
+            // 初始检查订阅状态
+            await checkSubscriptionStatus()
         }
     }
     
@@ -428,6 +445,123 @@ internal class StoreKitService: ObservableObject {
     /// 按价格排序产品
     private func sortByPrice(_ products: [Product]) -> [Product] {
         products.sorted(by: { $0.price < $1.price })
+    }
+    
+    // MARK: - 订阅状态监听
+    
+    /// 启动订阅状态监听（定期检查）
+    private func startSubscriptionStatusListener() {
+        // 创建新的监听任务
+        let task = Task { [weak self] in
+            guard let self = self else { return }
+            
+            while !Task.isCancelled {
+                await self.checkSubscriptionStatus()
+                
+                // 等待指定间隔（30秒）
+                try? await Task.sleep(nanoseconds: UInt64(self.subscriptionCheckInterval * 1_000_000_000))
+            }
+        }
+        
+        subscriberTasks.append(task)
+    }
+    
+    /// 检查所有订阅的状态
+    @MainActor
+    private func checkSubscriptionStatus() async {
+        // 获取所有已购买的自动续订订阅
+        let purchasedSubscriptions = allProducts.filter { product in
+            product.type == .autoRenewable && 
+            purchasedTransactions.contains(where: { $0.productID == product.id })
+        }
+        
+        // 如果没有订阅，直接返回
+        guard !purchasedSubscriptions.isEmpty else { return }
+        
+        // 使用 TaskGroup 并行检查所有订阅
+        await withTaskGroup(of: (String, Product.SubscriptionInfo.RenewalState?, Product.SubscriptionInfo.RenewalInfo?, Date?).self) { group in
+            for product in purchasedSubscriptions {
+                group.addTask { [weak self] in
+                    guard let self = self else { return (product.id, nil, nil, nil) }
+                    guard let subscription = product.subscription else { return (product.id, nil, nil, nil) }
+                    
+                    do {
+                        // 获取订阅状态
+                        let statuses = try await subscription.status
+                        guard let currentStatus = statuses.first else { return (product.id, nil, nil, nil) }
+                        
+                        let currentState = currentStatus.state
+                        var renewalInfo: Product.SubscriptionInfo.RenewalInfo?
+                        var expirationDate: Date?
+                        
+                        // 获取续订信息
+                        if case .verified(let info) = currentStatus.renewalInfo {
+                            renewalInfo = info
+                        }
+                        
+                        // 从 Transaction 中获取过期日期
+                        if case .verified(let transaction) = currentStatus.transaction {
+                            expirationDate = transaction.expirationDate
+                        }
+                        
+                        return (product.id, currentState, renewalInfo, expirationDate)
+                    } catch {
+                        print("获取订阅状态失败: \(product.id), 错误: \(error)")
+                        return (product.id, nil, nil, nil)
+                    }
+                }
+            }
+            
+            // 收集结果并处理状态变化
+            for await (productId, currentState, currentRenewalInfo, expirationDate) in group {
+                guard let currentState = currentState else { continue }
+                
+                // 1. 检查订阅状态是否变化
+                let lastState = lastSubscriptionStatus[productId]
+                if lastState != currentState {
+                    // 状态变化，更新缓存并通知
+                    lastSubscriptionStatus[productId] = currentState
+                    
+                    await MainActor.run {
+                        self.currentState = .subscriptionStatusChanged(currentState)
+                    }
+                    
+                    print("📱 订阅状态变化: \(productId) - \(currentState)")
+                }
+                
+                // 2. 检查是否取消订阅（willAutoRenew 从 true 变为 false）
+                if let currentRenewalInfo = currentRenewalInfo {
+                    let lastRenewalInfo = self.lastRenewalInfo[productId]
+                    let wasAutoRenewing = lastRenewalInfo?.willAutoRenew ?? true
+                    let isAutoRenewing = currentRenewalInfo.willAutoRenew
+                    
+                    if wasAutoRenewing && !isAutoRenewing {
+                        // 用户取消了订阅（但可能仍在有效期内）
+                        await MainActor.run {
+                            self.currentState = .subscriptionCancelled(productId)
+                        }
+                        
+                        // 从 Transaction 中获取过期日期
+                        if let expirationDate = expirationDate {
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                            print("⚠️ 订阅已取消: \(productId)，将在 \(formatter.string(from: expirationDate)) 过期")
+                        } else {
+                            print("⚠️ 订阅已取消: \(productId), 无过期时间")
+                        }
+                    }
+                    
+                    // 更新续订信息缓存
+                    self.lastRenewalInfo[productId] = currentRenewalInfo
+                }
+            }
+        }
+    }
+    
+    /// 手动检查订阅状态（供外部调用，在关键时机使用）
+    @MainActor
+    func checkSubscriptionStatusManually() async {
+        await checkSubscriptionStatus()
     }
     
    
