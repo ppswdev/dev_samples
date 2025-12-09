@@ -165,7 +165,7 @@ public class StoreKit2Manager {
         await service?.loadProducts()
     }
     
-    /// 手动刷新已购买产品列表
+    /// 手动刷新已购买产品交易信息，包括：有效的订阅交易信息，每个产品的最新交易信息
     public func refreshPurchases() async {
         await service?.loadPurchasedTransactions()
     }
@@ -271,6 +271,17 @@ public class StoreKit2Manager {
         } else {
             return false
         }
+    }
+    
+    /// 请求应用评价
+    /// - Note: 兼容 iOS 15.0+ 和 iOS 16.0+
+    ///   - iOS 15.0: 使用 SKStoreReviewController.requestReview() (StoreKit 1)
+    ///   - iOS 16.0+: 使用 AppStore.requestReview(in:) (StoreKit 2)
+    /// - Important: 系统会根据用户的使用情况决定是否显示评价弹窗
+    ///   每个应用在每个版本中最多显示 3 次评价请求
+    @MainActor
+    public func requestReview() {
+        service?.requestReview()
     }
     
     // MARK: - 控制方法

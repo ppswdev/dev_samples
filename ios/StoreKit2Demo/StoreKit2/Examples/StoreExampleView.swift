@@ -67,22 +67,22 @@ struct StoreExampleView: View {
                 
                 // 操作按钮
                 Section("操作") {
-                    Button("恢复购买") {
-                        viewModel.restorePurchases()
+                    Button("应用评价") {
+                        viewModel.requestReview()
                     }
-                    
+                   
                     if #available(iOS 16.0, *) {
                         Button {
                             Task {
-                                do {
-                                    try await viewModel.presentOfferCodeRedeemSheet()
-                                } catch {
-                                    print("优惠代码兑换失败: \(error)")
-                                }
+                                await viewModel.presentOfferCodeRedeemSheet()
                             }
                         } label: {
                             Text("优惠代码兑换")
                         }
+                    }
+                    
+                    Button("恢复购买") {
+                        viewModel.restorePurchases()
                     }
                     
                     Button("刷新已购买记录") {

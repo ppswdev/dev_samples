@@ -591,7 +591,7 @@ extension StoreKitService{
         if #available(iOS 15.0, *) {
             do {
                 // 获取当前的 windowScene
-                let windowScene = await UIApplication.shared.connectedScenes
+                let windowScene = UIApplication.shared.connectedScenes
                     .compactMap { $0 as? UIWindowScene }
                     .first
                 
@@ -670,6 +670,39 @@ extension StoreKitService{
         }
         #else
         throw StoreKitError.unknownError
+        #endif
+    }
+    
+    /// 请求应用评价
+    /// - Note: 兼容 iOS 15.0+ 和 iOS 16.0+
+    ///   - iOS 15.0: 使用 SKStoreReviewController.requestReview() (StoreKit 1)
+    ///   - iOS 16.0+: 使用 AppStore.requestReview(in:) (StoreKit 2)
+    @MainActor
+    func requestReview() {
+        #if os(iOS)
+        if #available(iOS 16.0, *) {
+            // iOS 16.0+ 使用 StoreKit 2 的新 API
+            if let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first {
+                AppStore.requestReview(in: windowScene)
+            }
+        } else {
+            // iOS 15.0 (以及 iOS 10.3-15.x) 使用 StoreKit 1 的 API
+            // 在 iOS 15 中，StoreKit 2 存在，但 AppStore.requestReview 需要 iOS 16+
+            // 所以回退到 StoreKit 1 的 SKStoreReviewController
+            SKStoreReviewController.requestReview()
+        }
+        #elseif os(macOS)
+        if #available(macOS 13.0, *) {
+            // macOS 13.0+ 使用 StoreKit 2 的新 API
+            if let windowScene = NSApplication.shared.windows.first?.windowScene {
+                AppStore.requestReview(in: windowScene)
+            }
+        } else if #available(macOS 10.14, *) {
+            // macOS 12.0+ (以及 macOS 10.14-12.x) 使用 StoreKit 1 的 API
+            SKStoreReviewController.requestReview()
+        }
         #endif
     }
 }

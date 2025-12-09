@@ -238,6 +238,12 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         self.subscriptionInfo = nil
     }
     
+    /// 应用评价
+    func requestReview() {
+        StoreKit2Manager.shared.requestReview()
+    }
+    
+    
     /// 打开订阅管理（使用 URL）
     func openSubscriptionManagement() {
         StoreKit2Manager.shared.openSubscriptionManagement()
