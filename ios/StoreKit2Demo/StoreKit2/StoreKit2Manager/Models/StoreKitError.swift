@@ -1,6 +1,6 @@
 //
 //  StoreKitError.swift
-//  StoreKitManager
+//  StoreKit2Manager
 //
 //  Created by xiaopin on 2025/12/6.
 //
@@ -70,7 +70,7 @@ public enum StoreKitError: Error, LocalizedError {
         case .configurationMissing:
             return "在调用其他方法之前，必须先调用 configure(with:delegate:) 或 configure(with:onStateChanged:) 方法"
         case .serviceNotStarted:
-            return "StoreKitManager 尚未初始化，请先调用 configure 方法"
+            return "StoreKit2Manager 尚未初始化，请先调用 configure 方法"
         case .purchaseInProgress:
             return "当前有购买正在进行，请等待完成后再试"
         case .cancelSubscriptionFailed(let error):

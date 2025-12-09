@@ -1,6 +1,6 @@
 //
 //  StoreExampleViewModel.swift
-//  StoreKitManager
+//  StoreKit2Manager
 //
 //  Created by xiaopin on 2025/12/6.
 //
@@ -9,7 +9,7 @@ import Foundation
 import StoreKit
 import SwiftUI
 
-/// StoreKitManager 使用示例的 ViewModel
+/// StoreKit2Manager 使用示例的 ViewModel
 @MainActor
 class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     @Published var products: [Product] = []
@@ -41,7 +41,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         setupStoreKit()
     }
     
-    /// 配置 StoreKitManager
+    /// 配置 StoreKit2Manager
     private func setupStoreKit() {
         let config = StoreKitConfig(
             productIds: productIds,
@@ -49,12 +49,12 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             autoSortProducts: true
         )
         
-        StoreKitManager.shared.configure(with: config, delegate: self)
+        StoreKit2Manager.shared.configure(with: config, delegate: self)
     }
     
     // MARK: - StoreKitDelegate
     
-    func storeKit(_ manager: StoreKitManager, didUpdateState state: StoreKitState) {
+    func storeKit(_ manager: StoreKit2Manager, didUpdateState state: StoreKitState) {
         switch state {
         case .loadingProducts:
             isLoading = true
@@ -140,11 +140,11 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         }
     }
     
-    func storeKit(_ manager: StoreKitManager, didLoadProducts products: [Product]) {
+    func storeKit(_ manager: StoreKit2Manager, didLoadProducts products: [Product]) {
         self.products = products
     }
     
-    func storeKit(_ manager: StoreKitManager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
+    func storeKit(_ manager: StoreKit2Manager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
         self.purchasedTransactions = efficient
         self.latestTransactions = latests
     }
@@ -155,7 +155,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     func purchase(_ product: Product) {
         Task {
             do {
-                try await StoreKitManager.shared.purchase(product)
+                try await StoreKit2Manager.shared.purchase(product)
             } catch {
                 errorMessage = error.localizedDescription
                 print("❌ 购买失败2: \(error.localizedDescription)")
@@ -167,7 +167,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     func restorePurchases() {
         Task {
             do {
-                try await StoreKitManager.shared.restorePurchases()
+                try await StoreKit2Manager.shared.restorePurchases()
             } catch {
                 print("❌ 恢复购买失败2: \(error.localizedDescription)")
             }
@@ -176,14 +176,14 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 刷新已购买产品
     func refreshPurchases() async {
-        await StoreKitManager.shared.refreshPurchases()
-        self.purchasedTransactions = StoreKitManager.shared.purchasedTransactions
-        self.latestTransactions = StoreKitManager.shared.latestTransactions
+        await StoreKit2Manager.shared.refreshPurchases()
+        self.purchasedTransactions = StoreKit2Manager.shared.purchasedTransactions
+        self.latestTransactions = StoreKit2Manager.shared.latestTransactions
     }
     
     /// 检查是否已购买
     func isPurchased(_ product: Product) -> Bool {
-        return StoreKitManager.shared.isPurchased(productId: product.id)
+        return StoreKit2Manager.shared.isPurchased(productId: product.id)
     }
     
     /// 加载订阅信息
@@ -196,7 +196,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         
         // 如果有订阅交易，从对应的产品中获取订阅信息
         for transaction in subscriptionTransactions {
-            if let product = StoreKitManager.shared.product(for: transaction.productID),
+            if let product = StoreKit2Manager.shared.product(for: transaction.productID),
                let subscription = product.subscription {
                 // 检查订阅状态
                 do {
@@ -218,7 +218,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
         }
         
         // 如果没有已购买的订阅，尝试从所有自动续订订阅中获取（用于显示订阅详情）
-        for autoRenewable in StoreKitManager.shared.autoRenewables {
+        for autoRenewable in StoreKit2Manager.shared.autoRenewables {
             if let subscription = autoRenewable.subscription {
                 do {
                     let statuses = try await subscription.status
@@ -240,12 +240,12 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 打开订阅管理（使用 URL）
     func openSubscriptionManagement() {
-        StoreKitManager.shared.openSubscriptionManagement()
+        StoreKit2Manager.shared.openSubscriptionManagement()
     }
     
     /// 显示应用内订阅管理界面
     func showManageSubscriptionsSheet() async -> Bool {
-        let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
+        let success = await StoreKit2Manager.shared.showManageSubscriptionsSheet()
         
         // 订阅管理界面关闭后，刷新状态
         if success {
@@ -258,7 +258,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 显示订阅管理界面（用于取消订阅）
     func showSubscriptionManagement() async {
-        let success = await StoreKitManager.shared.showManageSubscriptionsSheet()
+        let success = await StoreKit2Manager.shared.showManageSubscriptionsSheet()
         
         // 订阅管理界面关闭后，刷新状态
         if success {
@@ -269,12 +269,12 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 获取交易历史
     func getTransactionHistory() async -> [TransactionHistory] {
-        return await StoreKitManager.shared.getTransactionHistory()
+        return await StoreKit2Manager.shared.getTransactionHistory()
     }
     
     /// 显示优惠代码兑换界面（iOS 16.0+）
     func presentOfferCodeRedeemSheet() async {
-        let result =  await StoreKitManager.shared.presentOfferCodeRedeemSheet()
+        let result =  await StoreKit2Manager.shared.presentOfferCodeRedeemSheet()
         if(result){
             await refreshPurchases()
         }
@@ -285,15 +285,15 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 按类型获取产品
     var nonConsumables: [Product] {
-        StoreKitManager.shared.nonConsumables
+        StoreKit2Manager.shared.nonConsumables
     }
     
     var nonRenewables: [Product] {
-        StoreKitManager.shared.nonRenewables
+        StoreKit2Manager.shared.nonRenewables
     }
     
     var autoRenewables: [Product] {
-        StoreKitManager.shared.autoRenewables
+        StoreKit2Manager.shared.autoRenewables
     }
 }
 

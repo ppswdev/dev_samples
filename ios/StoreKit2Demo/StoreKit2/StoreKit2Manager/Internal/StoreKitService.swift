@@ -1,6 +1,6 @@
 //
 //  StoreKitService.swift
-//  StoreKitManager
+//  StoreKit2Manager
 //
 //  Created by xiaopin on 2025/12/6.
 //

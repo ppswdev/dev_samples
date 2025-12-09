@@ -1,6 +1,6 @@
 //
 //  StoreExampleView.swift
-//  StoreKitManager
+//  StoreKit2Manager
 //
 //  Created by xiaopin on 2025/12/6.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 import StoreKit
 
-/// StoreKitManager 使用示例的主视图
+/// StoreKit2Manager 使用示例的主视图
 struct StoreExampleView: View {
     @StateObject private var viewModel = StoreExampleViewModel()
     

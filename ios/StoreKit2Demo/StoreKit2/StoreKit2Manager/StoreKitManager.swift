@@ -1,6 +1,6 @@
 //
-//  StoreKitManager.swift
-//  StoreKitManager
+//  StoreKit2Manager.swift
+//  StoreKit2Manager
 //
 //  Created by xiaopin on 2025/12/6.
 //
@@ -8,11 +8,14 @@
 import Foundation
 import StoreKit
 
-public typealias SubscriptionInfo = Product.SubscriptionInfo
-public typealias SubscriptionStatus = Product.SubscriptionInfo.Status
+/// 订阅信息类型别名
+public typealias SubscriptionInfo = StoreKit.Product.SubscriptionInfo
 
-/// 交易类型别名
-public typealias Transaction = StoreKit.Transaction
+/// 订阅状态类型别名
+public typealias SubscriptionStatus = StoreKit.Product.SubscriptionInfo.Status
+
+/// 订阅周期类型别名
+public typealias SubscriptionPeriod = StoreKit.Product.SubscriptionPeriod
 
 /// 续订信息类型别名
 public typealias RenewalInfo = StoreKit.Product.SubscriptionInfo.RenewalInfo
@@ -20,11 +23,14 @@ public typealias RenewalInfo = StoreKit.Product.SubscriptionInfo.RenewalInfo
 /// 续订状态类型别名
 public typealias RenewalState = StoreKit.Product.SubscriptionInfo.RenewalState
 
+/// 交易类型别名
+public typealias Transaction = StoreKit.Transaction
+
 /// StoreKit 管理器
 /// 提供统一的接口来管理应用内购买
-public class StoreKitManager {
+public class StoreKit2Manager {
     /// 单例实例
-    public static let shared = StoreKitManager()
+    public static let shared = StoreKit2Manager()
     
     // MARK: - 配置和代理
     
@@ -271,7 +277,7 @@ public class StoreKitManager {
 
 // MARK: - StoreKitServiceDelegate
 
-extension StoreKitManager: StoreKitServiceDelegate {
+extension StoreKit2Manager: StoreKitServiceDelegate {
     @MainActor
     func service(_ service: StoreKitService, didUpdateState state: StoreKitState) {
         currentState = state
