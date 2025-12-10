@@ -451,8 +451,12 @@ struct TransactionRow: View {
                 detailRow("价格", "¥\(price)")
             }
             
-            if let currency = txn.currency {
-                detailRow("货币", currency.identifier)
+            if #available(iOS 16.0, *) {
+                if let currency = txn.currency {
+                    detailRow("货币", currency.identifier)
+                }
+            } else {
+                // Fallback on earlier versions
             }
             
             detailRow("购买数量", "\(txn.purchasedQuantity)")
@@ -609,14 +613,18 @@ struct TransactionRow: View {
     }
     
     private var environmentName: String {
-        switch txn.environment {
-        case .production:
-            return "生产环境"
-        case .sandbox:
-            return "沙盒环境"
-        case .xcode:
-            return "Xcode 测试"
-        default:
+        if #available(iOS 16.0, *) {
+            switch txn.environment {
+            case .production:
+                return "生产环境"
+            case .sandbox:
+                return "沙盒环境"
+            case .xcode:
+                return "Xcode 测试"
+            default:
+                return "未知"
+            }
+        } else {
             return "未知"
         }
     }
@@ -704,8 +712,12 @@ struct EffectiveTransactionRow: View {
                 effectiveDetailRow("价格", "¥\(price)")
             }
             
-            if let currency = transaction.currency {
-                effectiveDetailRow("货币", currency.identifier)
+            if #available(iOS 16.0, *) {
+                if let currency = transaction.currency {
+                    effectiveDetailRow("货币", currency.identifier)
+                }
+            } else {
+                // Fallback on earlier versions
             }
             
             effectiveDetailRow("购买数量", "\(transaction.purchasedQuantity)")
@@ -833,16 +845,19 @@ struct EffectiveTransactionRow: View {
     }
     
     private var effectiveEnvironmentName: String {
-        switch transaction.environment {
-        case .production:
-            return "生产环境"
-        case .sandbox:
-            return "沙盒环境"
-        case .xcode:
-            return "Xcode 测试"
-        default:
-            return "未知"
+        if #available(iOS 16.0, *) {
+            switch transaction.environment {
+            case .production:
+                return "生产环境"
+            case .sandbox:
+                return "沙盒环境"
+            case .xcode:
+                return "Xcode 测试"
+            default:
+                return "未知"
+            }
         }
+        return "未知"
     }
 }
 
@@ -928,8 +943,12 @@ struct LatestTransactionRow: View {
                 latestDetailRow("价格", "¥\(price)")
             }
             
-            if let currency = transaction.currency {
-                latestDetailRow("货币", currency.identifier)
+            if #available(iOS 16.0, *) {
+                if let currency = transaction.currency {
+                    latestDetailRow("货币", currency.identifier)
+                }
+            } else {
+                // Fallback on earlier versions
             }
             
             latestDetailRow("购买数量", "\(transaction.purchasedQuantity)")
@@ -1074,16 +1093,20 @@ struct LatestTransactionRow: View {
     }
     
     private var latestEnvironmentName: String {
-        switch transaction.environment {
-        case .production:
-            return "生产环境"
-        case .sandbox:
-            return "沙盒环境"
-        case .xcode:
-            return "Xcode 测试"
-        default:
-            return "未知"
+        if #available(iOS 16.0, *) {
+            switch transaction.environment {
+            case .production:
+                return "生产环境"
+            case .sandbox:
+                return "沙盒环境"
+            case .xcode:
+                return "Xcode 测试"
+            default:
+                return "未知"
+            }
         }
+        
+        return "未知"
     }
 }
 

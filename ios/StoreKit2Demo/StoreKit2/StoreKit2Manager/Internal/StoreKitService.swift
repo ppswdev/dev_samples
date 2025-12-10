@@ -935,10 +935,15 @@ extension StoreKitService{
         }
         
         // 货币代码
-        if let currency = transaction.currency {
-            print("   - 货币代码: \(currency)") // 货币代码（如CNY、USD）
+        if #available(iOS 16.0, *) {
+            if let currency = transaction.currency {
+                print("   - 货币代码: \(currency)") // 货币代码（如CNY、USD）
+            }
+            print("   - 环境: \(transaction.environment.rawValue)")
+        } else {
+            // Fallback on earlier versions
         }
-        print("   - 环境: \(transaction.environment.rawValue)") // 交易环境（sandbox/production）
+        // 交易环境（sandbox/production）
         print("   - 应用交易ID: \(transaction.appTransactionID)") // 应用级别的交易ID
         print("   - 应用Bundle ID: \(transaction.appBundleID )") // 应用的Bundle标识符
         // 应用账户Token（用于关联用户账户）
@@ -956,7 +961,11 @@ extension StoreKitService{
         //}
         
         print("   - 签名日期: \(formatter.string(from: transaction.signedDate))") // 交易签名的日期
-        print("   - 商店区域: \(transaction.storefront)") // 商店区域代码
+        if #available(iOS 17.0, *) {
+            print("   - 商店区域: \(transaction.storefront)")
+        } else {
+            // Fallback on earlier versions
+        } // 商店区域代码
         
         // Web订单行项目ID
         if let webOrderLineItemID = transaction.webOrderLineItemID {
