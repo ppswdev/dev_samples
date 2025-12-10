@@ -137,31 +137,31 @@ public class StoreKit2Manager {
     
     /// 获取所有产品
     /// - Returns: 当前已知的全部产品列表
-    public func getAllProducts() -> [Product] async {
+    public func getAllProducts() async -> [Product] {
         return allProducts
     }
     
     /// 获取所有非消耗型产品
     /// - Returns: 非消耗品数组（如：永久解锁类产品）
-    public func getNonConsumablesProducts() -> [Product] async {
+    public func getNonConsumablesProducts() async -> [Product] {
         return nonConsumables
     }
     
     /// 获取所有消耗型产品
     /// - Returns: 消耗品数组（如：虚拟币、道具等）
-    public func getConsumablesProducts() -> [Product] async {
+    public func getConsumablesProducts() async -> [Product] {
         return consumables
     }
     
     /// 获取所有非续订型订阅产品
     /// - Returns: 非续订订阅产品数组（如：半年的订阅）
-    public func getNonRenewablesProducts() -> [Product] async {
+    public func getNonRenewablesProducts() async -> [Product] {
         return nonRenewables
     }
     
     /// 获取所有自动续订型订阅产品
     /// - Returns: 自动续订订阅产品数组（如：包月/包年订阅）
-    public func getAutoRenewablesProducts() -> [Product] async {
+    public func getAutoRenewablesProducts() async -> [Product] {
         return autoRenewables
     }
     

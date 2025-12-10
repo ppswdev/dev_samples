@@ -23,7 +23,7 @@ public struct StoreKitConverter {
     public static func productsToDictionaryArray(_ products: [Product]) -> [[String: Any]] {
         return ProductConverter.toDictionaryArray(products)
     }
-    
+
     /// 将 Product 转换为 JSON 字符串
     public static func productToJSONString(_ product: Product) -> String? {
         return ProductConverter.toJSONString(product)
@@ -115,5 +115,6 @@ public struct StoreKitConverter {
     public static func subscriptionInfoToDictionary(_ subscription: Product.SubscriptionInfo, product: Product? = nil) -> [String: Any] {
         return SubscriptionConverter.subscriptionInfoToDictionary(subscription, product: product)
     }
+
 }
 

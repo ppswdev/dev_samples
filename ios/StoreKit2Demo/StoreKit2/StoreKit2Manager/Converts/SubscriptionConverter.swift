@@ -14,7 +14,7 @@ public struct SubscriptionConverter {
     
     // MARK: - SubscriptionInfo
     
-    /// 将 SubscriptionInfo 转换为 Dictionary
+    /// 将 SubscriptionInfo 转换为 Dictionary（同步版本，不包含异步属性）
     /// - Parameters:
     ///   - subscription: SubscriptionInfo 对象
     ///   - product: 关联的 Product 对象（可选）
