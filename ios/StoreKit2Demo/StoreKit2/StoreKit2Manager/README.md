@@ -25,6 +25,18 @@
 
 ## 快速开始
 
+### 1. 在 Podfile 中添加
+
+```ruby
+platform :ios, '15.0'
+
+target 'YourApp' do
+  use_frameworks!
+  
+  pod 'StoreKit2Manager', '~> 1.0.0'
+end
+```
+
 ### 1. 基本配置
 
 ```swift

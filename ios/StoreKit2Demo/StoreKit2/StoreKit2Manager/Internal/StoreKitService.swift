@@ -939,11 +939,14 @@ extension StoreKitService{
             if let currency = transaction.currency {
                 print("   - 货币代码: \(currency)") // 货币代码（如CNY、USD）
             }
-            print("   - 环境: \(transaction.environment.rawValue)")
         } else {
             // Fallback on earlier versions
         }
-        // 交易环境（sandbox/production）
+        if #available(iOS 16.0, *) {
+            print("   - 环境: \(transaction.environment.rawValue)")
+        } else {
+            // Fallback on earlier versions
+        } // 交易环境（sandbox/production）
         print("   - 应用交易ID: \(transaction.appTransactionID)") // 应用级别的交易ID
         print("   - 应用Bundle ID: \(transaction.appBundleID )") // 应用的Bundle标识符
         // 应用账户Token（用于关联用户账户）
