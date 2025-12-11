@@ -18,14 +18,15 @@ public struct ProductConverter {
     public static func toDictionary(_ product: Product) -> [String: Any] {
         var dict: [String: Any] = [:]
         
-        // 基本信息
+        // 基本信息（确保都是字符串类型）
         dict["id"] = product.id
         dict["displayName"] = product.displayName
         dict["description"] = product.description
         
         // 价格信息
         let priceDecimal = product.price
-        dict["price"] = NSDecimalNumber(decimal: priceDecimal).doubleValue
+        let priceDouble = NSDecimalNumber(decimal: priceDecimal).doubleValue
+        dict["price"] = Double(String(format: "%.2f", priceDouble)) ?? priceDouble
         dict["displayPrice"] = product.displayPrice
         
         // 产品类型
@@ -40,8 +41,7 @@ public struct ProductConverter {
         if let jsonString = String(data: jsonData, encoding: .utf8) {
             dict["jsonRepresentation"] = jsonString
         } else {
-            // 如果无法转换为字符串，使用 Base64 编码
-            dict["jsonRepresentation"] = jsonData.base64EncodedString()
+            dict["jsonRepresentation"] = ""
         }
         
         // 订阅信息（如果有）

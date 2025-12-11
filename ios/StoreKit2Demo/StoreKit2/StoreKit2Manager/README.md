@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="https://developer.apple.com/assets/elements/icons/storekit/storekit-128x128_2x.png" alt="StoreKit2">
+</p>
+
 # StoreKit2Manager
 
-一个简洁、易用的 StoreKit2 封装库，提供统一的接口来管理应用内购买。
+一个简洁、易用的 StoreKit2 封装库，提供统一的接口来管理应用内购买，直接玩透StoreKit2所有最新API。
 
 ## 特性
 

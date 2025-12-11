@@ -138,6 +138,9 @@ public class StoreKit2Manager {
     /// 获取所有产品
     /// - Returns: 当前已知的全部产品列表
     public func getAllProducts() async -> [Product] {
+        if(self.allProducts.isEmpty){
+            await refreshProducts()
+        }
         return allProducts
     }
     

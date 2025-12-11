@@ -57,6 +57,21 @@
       "productID" : "com.ppswdev.store.lifetimevip2",
       "referenceName" : "Lifetime VIP 2",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "0FE3B8EB",
+      "localizations" : [
+        {
+          "description" : "Gold coin 10 , for purchase",
+          "displayName" : "Gold coin 10",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.ppswdev.store.goldcoin.10",
+      "referenceName" : "Gold Coin 10",
+      "type" : "Consumable"
     }
   ],
   "settings" : {
@@ -182,6 +197,7 @@
           "groupNumber" : 1,
           "internalID" : "D7180163",
           "introductoryOffer" : {
+            "displayPrice" : "0.99",
             "internalID" : "19311780",
             "paymentMode" : "free",
             "subscriptionPeriod" : "P3D"
@@ -199,7 +215,33 @@
           "subscriptionGroupID" : "732E29F2",
           "type" : "RecurringSubscription",
           "winbackOffers" : [
-
+            {
+              "internalID" : "6EF60F3E",
+              "isEligible" : true,
+              "offerID" : "user_winback_freetrail",
+              "paymentMode" : "free",
+              "referenceName" : "回归特惠-免费试用",
+              "subscriptionPeriod" : "P3D"
+            },
+            {
+              "displayPrice" : "0.99",
+              "internalID" : "49B6E4C4",
+              "isEligible" : true,
+              "offerID" : "user_winback_payupfront",
+              "paymentMode" : "payUpFront",
+              "referenceName" : "回归特惠-提前预付",
+              "subscriptionPeriod" : "P1M"
+            },
+            {
+              "displayPrice" : "1.99",
+              "internalID" : "027B653C",
+              "isEligible" : true,
+              "numberOfPeriods" : 1,
+              "offerID" : "user_winback_payasyougo",
+              "paymentMode" : "payAsYouGo",
+              "referenceName" : "回归特惠-按需付费",
+              "subscriptionPeriod" : "P1W"
+            }
           ]
         },
         {

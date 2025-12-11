@@ -21,36 +21,25 @@ public struct TransactionConverter {
         // 基本信息
         dict["id"] = String(transaction.id)
         dict["productID"] = transaction.productID
-        dict["purchaseDate"] = dateToTimestamp(transaction.purchaseDate)
-        
-        // 过期日期（如果有）
-        if let expirationDate = transaction.expirationDate {
-            dict["expirationDate"] = dateToTimestamp(expirationDate)
-        } else {
-            dict["expirationDate"] = NSNull()
-        }
-        
-        // 撤销日期（如果有）
-        if let revocationDate = transaction.revocationDate {
-            dict["revocationDate"] = dateToTimestamp(revocationDate)
-            dict["isRefunded"] = true
-            dict["isRevoked"] = true
-        } else {
-            dict["revocationDate"] = NSNull()
-            dict["isRefunded"] = false
-            dict["isRevoked"] = false
-        }
-        
-        // 撤销原因
-        if let revocationReason = transaction.revocationReason {
-            dict["revocationReason"] = revocationReasonToString(revocationReason)
-        } else {
-            dict["revocationReason"] = NSNull()
-        }
-        
         // 产品类型
         dict["productType"] = productTypeToString(transaction.productType)
-        
+        // 交易价格（如果有）
+        if let price = transaction.price {
+            dict["price"] = Double(String(format: "%.2f", NSDecimalNumber(decimal: price).doubleValue)) ?? NSDecimalNumber(decimal: price).doubleValue
+        } else {
+            dict["price"] = 0.00
+        }
+        // 货币代码（iOS 16.0+）
+        if #available(iOS 16.0, *) {
+            if let currency = transaction.currency {
+                // 确保是字符串类型
+                dict["currency"] = String(describing: currency)
+            } else {
+                dict["currency"] = NSNull()
+            }
+        } else {
+            dict["currency"] = NSNull()
+        }
         // 所有权类型
         dict["ownershipType"] = ownershipTypeToString(transaction.ownershipType)
         
@@ -60,42 +49,56 @@ public struct TransactionConverter {
         // 原始购买日期
         dict["originalPurchaseDate"] = dateToTimestamp(transaction.originalPurchaseDate)
         
-        // 是否升级
-        dict["isUpgraded"] = transaction.isUpgraded
-        
+        dict["purchaseDate"] = dateToTimestamp(transaction.purchaseDate)
         // 购买数量
         dict["purchasedQuantity"] = transaction.purchasedQuantity
         
-        // 交易价格（如果有）
-        if let price = transaction.price {
-            dict["price"] = NSDecimalNumber(decimal: price).doubleValue
+        // 交易原因（iOS 17.0+，表示购买还是续订）
+        if #available(iOS 17.0, *) {
+            dict["purchaseReason"] = transactionReasonToString(transaction.reason)
         } else {
-            dict["price"] = NSNull()
+            dict["purchaseReason"] = ""
         }
         
-        // 货币代码（iOS 16.0+）
-        if #available(iOS 16.0, *) {
-            if let currency = transaction.currency {
-                dict["currency"] = currency
-            } else {
-                dict["currency"] = NSNull()
-            }
+        // 订阅组ID（如果有，仅订阅产品，确保是字符串类型）
+        if let subscriptionGroupID = transaction.subscriptionGroupID {
+            dict["subscriptionGroupID"] = String(describing: subscriptionGroupID)
         } else {
-            dict["currency"] = NSNull()
+            dict["subscriptionGroupID"] = NSNull()
         }
-    
+        
+        // 过期日期（如果有）
+        if let expirationDate = transaction.expirationDate {
+            dict["expirationDate"] = dateToTimestamp(expirationDate)
+        } else {
+            dict["expirationDate"] = NSNull()
+        }
+        
+        // 是否升级
+        dict["isUpgraded"] = transaction.isUpgraded
+        
+        // 撤销日期（如果有）
+        if let revocationDate = transaction.revocationDate {
+            dict["hasRevocation"] = true
+            dict["revocationDate"] = dateToTimestamp(revocationDate)
+        } else {
+            dict["hasRevocation"] = false
+            dict["revocationDate"] = NSNull()
+        }
+        
+        // 撤销原因
+        if let revocationReason = transaction.revocationReason {
+            dict["revocationReason"] = revocationReasonToString(revocationReason)
+        } else {
+            dict["revocationReason"] = NSNull()
+        }
+        
         // 环境信息（iOS 16.0+）
         if #available(iOS 16.0, *) {
             dict["environment"] = environmentToString(transaction.environment)
         } else {
             dict["environment"] = "unknown"
         }
-        
-        // 应用交易ID
-        dict["appTransactionID"] = transaction.appTransactionID
-        
-        // 应用Bundle ID
-        dict["appBundleID"] = transaction.appBundleID
         
         // 应用账户令牌（如果有）
         if let appAccountToken = transaction.appAccountToken {
@@ -104,141 +107,53 @@ public struct TransactionConverter {
             dict["appAccountToken"] = ""
         }
         
-        // 订阅组ID（如果有，仅订阅产品）
-        if let subscriptionGroupID = transaction.subscriptionGroupID {
-            dict["subscriptionGroupID"] = subscriptionGroupID
+        // 应用交易ID（iOS 18.4+，确保是字符串类型）
+        if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
+            dict["appBundleID"] = String(describing: transaction.appBundleID)
+            dict["appTransactionID"] = transaction.appTransactionID
         } else {
-            dict["subscriptionGroupID"] = NSNull()
+            dict["appTransactionID"] = NSNull()
+            dict["appBundleID"] = NSNull()
         }
         
         // 签名日期
         dict["signedDate"] = dateToTimestamp(transaction.signedDate)
         
         // 商店区域（iOS 17.0+）
-        if #available(iOS 17.0, *) {
-            dict["storefront"] = transaction.storefront
+        if #available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, visionOS 1.0, *) {
+            let storefront = transaction.storefront
+            dict["storefrontId"] = storefront.id
+            dict["storefrontCountryCode"] = storefront.countryCode
+            if let currency = storefront.currency {
+                dict["storefrontCurrency"] = String(describing: currency)
+            } else {
+                dict["storefrontCurrency"] = ""
+            }
         } else {
-            dict["storefront"] = NSNull()
+            dict["storefrontId"] = ""
+            dict["storefrontCountryCode"] = ""
+            dict["storefrontCurrency"] = ""
         }
         
         // Web订单行项目ID（如果有）
         if let webOrderLineItemID = transaction.webOrderLineItemID {
-            dict["webOrderLineItemID"] = String(webOrderLineItemID)
+            dict["webOrderLineItemID"] = webOrderLineItemID
         } else {
-            dict["webOrderLineItemID"] = NSNull()
+            dict["webOrderLineItemID"] = ""
         }
         
         // 设备验证
-        dict["deviceVerification"] = transaction.deviceVerification
+        dict["deviceVerification"] = transaction.deviceVerification.base64EncodedString()
         
         // 设备验证Nonce
-        dict["deviceVerificationNonce"] = transaction.deviceVerificationNonce
-        
-        // 交易原因（iOS 17.0+）
-        if #available(iOS 17.0, *) {
-            dict["reason"] = transactionReasonToString(transaction.reason)
-        } else {
-            dict["reason"] = ""
-        }
+        dict["deviceVerificationNonce"] = transaction.deviceVerificationNonce.uuidString
         
         // 优惠信息
-        // iOS 17.2+ 使用新的 offer 属性
-        if #available(iOS 17.2, macOS 14.2, tvOS 17.2, watchOS 10.2, *) {
-            if let offer = transaction.offer {
-                var offerDict: [String: Any] = [:]
-                // offer.type 的类型需要根据实际 API 调整
-                // 暂时使用 String(describing:) 作为后备方案
-                let offerTypeString = String(describing: offer.type)
-                // 移除命名空间前缀
-                if let lastDot = offerTypeString.lastIndex(of: ".") {
-                    offerDict["type"] = String(offerTypeString[offerTypeString.index(after: lastDot)...])
-                } else {
-                    offerDict["type"] = offerTypeString
-                }
-                
-                if let offerID = offer.id {
-                    offerDict["id"] = offerID
-                } else {
-                    offerDict["id"] = NSNull()
-                }
-                
-                if let paymentMode = offer.paymentMode {
-                    offerDict["paymentMode"] = transactionOfferPaymentModeToString(paymentMode)
-                } else {
-                    offerDict["paymentMode"] = NSNull()
-                }
-                
-                // 优惠周期（iOS 18.4+）
-                if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
-                    if let period = offer.period {
-                        offerDict["period"] = subscriptionPeriodToDictionary(period)
-                    } else {
-                        offerDict["period"] = NSNull()
-                    }
-                } else {
-                    offerDict["period"] = NSNull()
-                }
-                
-                dict["offer"] = offerDict
-            } else {
-                dict["offer"] = NSNull()
-            }
-        } else if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
-            // iOS 15.0 - iOS 17.1 使用已废弃的属性
-            var offerDict: [String: Any] = [:]
-            
-            if let offerType = transaction.offerType {
-                offerDict["type"] = transactionOfferTypeDeprecatedToString(offerType)
-                
-                if let offerID = transaction.offerID {
-                    offerDict["id"] = offerID
-                } else {
-                    offerDict["id"] = NSNull()
-                }
-                
-                if let paymentMode = transaction.offerPaymentModeStringRepresentation {
-                    offerDict["paymentMode"] = paymentMode
-                } else {
-                    offerDict["paymentMode"] = NSNull()
-                }
-                
-                // 优惠周期字符串（iOS 15.0 - iOS 18.3）
-                if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
-                    // iOS 18.4+ 已废弃，但为了兼容性仍可检查
-                    offerDict["period"] = NSNull()
-                } else {
-                    if let period = transaction.offerPeriodStringRepresentation {
-                        offerDict["period"] = period
-                    } else {
-                        offerDict["period"] = NSNull()
-                    }
-                }
-                
-                dict["offer"] = offerDict
-            } else {
-                dict["offer"] = NSNull()
-            }
-        } else {
-            // iOS 15.0 以下版本不支持优惠信息
-            dict["offer"] = NSNull()
-        }
+        dict["offer"] = offerToDictionary(from: transaction)
         
         // 高级商务信息（iOS 18.4+）
         // 注意：Transaction.AdvancedCommerceInfo 的具体结构需要根据实际 API 调整
-        if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
-            if let advancedCommerceInfo = transaction.advancedCommerceInfo {
-                // 使用 String(describing:) 作为后备方案
-                // 或者根据实际 API 结构进行转换
-                dict["advancedCommerceInfo"] = String(describing: advancedCommerceInfo)
-            } else {
-                dict["advancedCommerceInfo"] = NSNull()
-            }
-        } else {
-            dict["advancedCommerceInfo"] = NSNull()
-        }
-        
-        // Debug描述
-        dict["debugDescription"] = transaction.debugDescription
+        // 暂不处理
         
         return dict
     }
@@ -331,17 +246,20 @@ public struct TransactionConverter {
     
     /// 撤销原因转字符串
     private static func revocationReasonToString(_ reason: Transaction.RevocationReason) -> String {
-        // 使用 String(describing:) 作为后备方案，因为枚举值可能因 iOS 版本而异
-        let reasonString = String(describing: reason)
-        // 移除命名空间前缀
-        if let lastDot = reasonString.lastIndex(of: ".") {
-            return String(reasonString[reasonString.index(after: lastDot)...])
-        }
-        return reasonString
+        return extractEnumValueName(from: reason)
     }
     
-    // 注意：Transaction.Offer.OfferType 类型可能不存在，已移除此方法
-    // 如果需要，可以使用 String(describing:) 来获取类型字符串
+    /// 从枚举值中提取名称（移除命名空间前缀）
+    /// - Parameter value: 任意类型
+    /// - Returns: 枚举值名称字符串
+    private static func extractEnumValueName<T>(from value: T) -> String {
+        let valueString = String(describing: value)
+        // 移除命名空间前缀（如 "Transaction.OfferType.introductory" -> "introductory"）
+        if let lastDot = valueString.lastIndex(of: ".") {
+            return String(valueString[valueString.index(after: lastDot)...])
+        }
+        return valueString
+    }
     
     /// 交易优惠类型转字符串（已废弃，iOS 15.0-17.1）
     @available(iOS 15.0, *)
@@ -372,16 +290,141 @@ public struct TransactionConverter {
         }
     }
     
+    // MARK: - Offer 转换方法
+    
+    /// 交易优惠类型转字符串（用于 Transaction.Offer，iOS 17.2+）
+    @available(iOS 17.2, *)
+    private static func transactionOfferTypeToString(_ type: Transaction.OfferType) -> String {
+        // 使用 if-else 判断，因为 switch 可能无法处理所有情况
+        if type == .introductory {
+            return "introductory"
+        } else if type == .promotional {
+            return "promotional"
+        } else if type == .code {
+            return "code"
+        } else {
+            // iOS 18.0+ 支持 winBack
+            if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *) {
+                if type == .winBack {
+                    return "winBack"
+                }
+            }
+            return "unknown"
+        }
+    }
+    
     /// 交易优惠支付模式转字符串（用于 Transaction.Offer.PaymentMode）
     @available(iOS 17.2, *)
     private static func transactionOfferPaymentModeToString(_ mode: Transaction.Offer.PaymentMode) -> String {
-        // 使用 String(describing:) 作为后备方案，因为类型可能因 iOS 版本而异
-        let modeString = String(describing: mode)
-        // 移除命名空间前缀
-        if let lastDot = modeString.lastIndex(of: ".") {
-            return String(modeString[modeString.index(after: lastDot)...])
+        switch mode {
+        case .freeTrial:
+            return "freeTrial"
+        case .payAsYouGo:
+            return "payAsYouGo"
+        case .payUpFront:
+            return "payUpFront"
+        default:
+            return "unknown"
         }
-        return modeString
+    }
+    
+    /// 将 Transaction 的优惠信息转换为 Dictionary
+    /// - Parameter transaction: Transaction 对象
+    /// - Returns: 优惠信息字典，如果没有优惠则返回 NSNull
+    private static func offerToDictionary(from transaction: Transaction) -> Any {
+        // iOS 17.2+ 使用新的 offer 属性
+        if #available(iOS 17.2, macOS 14.2, tvOS 17.2, watchOS 10.2, *) {
+            return modernOfferToDictionary(from: transaction)
+        }
+        // iOS 15.0 - iOS 17.1 使用已废弃的属性
+        else if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *) {
+            return deprecatedOfferToDictionary(from: transaction)
+        }
+        // iOS 15.0 以下版本不支持优惠信息
+        else {
+            return NSNull()
+        }
+    }
+    
+    /// 使用新的 offer 属性转换优惠信息（iOS 17.2+）
+    @available(iOS 17.2, macOS 14.2, tvOS 17.2, watchOS 10.2, *)
+    private static func modernOfferToDictionary(from transaction: Transaction) -> Any {
+        guard let offer = transaction.offer else {
+            return NSNull()
+        }
+        
+        var offerDict: [String: Any] = [:]
+        
+        // 优惠类型
+        offerDict["type"] = transactionOfferTypeToString(offer.type)
+        
+        // 优惠ID
+        if let offerID = offer.id {
+            offerDict["id"] = offerID
+        } else {
+            offerDict["id"] = NSNull()
+        }
+        
+        // 支付模式（使用自定义方法）
+        if let paymentMode = offer.paymentMode {
+            offerDict["paymentMode"] = transactionOfferPaymentModeToString(paymentMode)
+        } else {
+            offerDict["paymentMode"] = NSNull()
+        }
+        
+        // 优惠周期（iOS 18.4+）
+        offerDict["periodCount"] = 0
+        offerDict["periodUnit"] = ""
+        if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
+            if let period = offer.period {
+                offerDict["periodCount"] = period.value
+                offerDict["periodUnit"] = subscriptionPeriodUnitToString(period.unit)
+            }
+        }
+        
+        return offerDict
+    }
+    
+    /// 使用已废弃的属性转换优惠信息（iOS 15.0 - iOS 17.1）
+    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+    private static func deprecatedOfferToDictionary(from transaction: Transaction) -> Any {
+        guard let offerType = transaction.offerType else {
+            return NSNull()
+        }
+        
+        var offerDict: [String: Any] = [:]
+        
+        // 优惠类型
+        offerDict["type"] = transactionOfferTypeDeprecatedToString(offerType)
+        
+        // 优惠ID
+        if let offerID = transaction.offerID {
+            offerDict["id"] = String(describing: offerID)
+        } else {
+            offerDict["id"] = NSNull()
+        }
+        
+        // 支付模式（字符串表示）
+        if let paymentMode = transaction.offerPaymentModeStringRepresentation {
+            offerDict["paymentMode"] = paymentMode
+        } else {
+            offerDict["paymentMode"] = NSNull()
+        }
+        
+        // 优惠周期（iOS 15.0 - iOS 18.3 使用字符串，iOS 18.4+ 已废弃）
+        if #available(iOS 18.4, macOS 15.4, tvOS 18.4, watchOS 11.4, visionOS 2.4, *) {
+            // iOS 18.4+ 已废弃 offerPeriodStringRepresentation，返回 NSNull
+            offerDict["period"] = NSNull()
+        } else {
+            // iOS 15.0 - iOS 18.3 使用字符串表示
+            if let period = transaction.offerPeriodStringRepresentation {
+                offerDict["period"] = period
+            } else {
+                offerDict["period"] = NSNull()
+            }
+        }
+        
+        return offerDict
     }
     
     /// 订阅周期转 Dictionary

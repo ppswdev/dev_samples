@@ -23,6 +23,8 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     // 从 StoreProducts.storekit 获取的产品ID
     private let productIds = [
+        //消耗品
+        "com.ppswdev.store.goldcoin.10",
         // 非消耗品
         "com.ppswdev.store.lifetimevip",
         "com.ppswdev.store.lifetimevip2",
@@ -296,6 +298,10 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     
     /// 按类型获取产品
+    var consumables: [Product] {
+        StoreKit2Manager.shared.consumables
+    }
+    
     var nonConsumables: [Product] {
         StoreKit2Manager.shared.nonConsumables
     }
@@ -306,6 +312,21 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     var autoRenewables: [Product] {
         StoreKit2Manager.shared.autoRenewables
+    }
+    
+    /// 获取消耗品的购买历史
+    /// - Parameter productId: 产品ID
+    /// - Returns: 该消耗品的所有购买历史
+    func getConsumablePurchaseHistory(for productId: String) async -> [TransactionHistory] {
+        return await StoreKit2Manager.shared.getConsumablePurchaseHistory(for: productId)
+    }
+    
+    /// 获取消耗品的购买次数
+    /// - Parameter productId: 产品ID
+    /// - Returns: 购买次数
+    func getConsumablePurchaseCount(for productId: String) async -> Int {
+        let history = await getConsumablePurchaseHistory(for: productId)
+        return history.count
     }
 }
 

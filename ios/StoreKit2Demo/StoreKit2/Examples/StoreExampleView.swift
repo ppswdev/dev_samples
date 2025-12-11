@@ -24,6 +24,19 @@ struct StoreExampleView: View {
                     }
                 }
                 
+                // 消耗品
+                if !viewModel.consumables.isEmpty {
+                    Section("消耗品") {
+                        ForEach(viewModel.consumables, id: \.id) { product in
+                            ConsumableProductRow(
+                                product: product,
+                                viewModel: viewModel,
+                                onPurchase: { viewModel.purchase(product) }
+                            )
+                        }
+                    }
+                }
+                
                 // 非消耗品
                 if !viewModel.nonConsumables.isEmpty {
                     Section("非消耗品") {
@@ -172,6 +185,177 @@ struct ProductRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - 消耗品产品行视图
+
+struct ConsumableProductRow: View {
+    let product: Product
+    @ObservedObject var viewModel: StoreExampleViewModel
+    let onPurchase: () -> Void
+    @State private var purchaseCount: Int = 0
+    @State private var isLoadingHistory = false
+    @State private var showPurchaseHistory = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(product.displayName)
+                        .font(.headline)
+                    Text(product.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(product.displayPrice)
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                    
+                    // 显示购买次数
+                    if isLoadingHistory {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else if purchaseCount > 0 {
+                        Text("已购买 \(purchaseCount) 次")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    } else {
+                        Text("未购买")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(spacing: 8) {
+                    Button("购买") {
+                        onPurchase()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    if purchaseCount > 0 {
+                        Button("购买历史") {
+                            showPurchaseHistory = true
+                        }
+                        .buttonStyle(.bordered)
+                        .font(.caption2)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .sheet(isPresented: $showPurchaseHistory) {
+            ConsumablePurchaseHistoryView(
+                product: product,
+                viewModel: viewModel
+            )
+        }
+        .task {
+            await loadPurchaseCount()
+        }
+        .onChange(of: viewModel.latestTransactions) { _ in
+            Task {
+                await loadPurchaseCount()
+            }
+        }
+    }
+    
+    private func loadPurchaseCount() async {
+        isLoadingHistory = true
+        let count = await viewModel.getConsumablePurchaseCount(for: product.id)
+        await MainActor.run {
+            purchaseCount = count
+            isLoadingHistory = false
+        }
+    }
+}
+
+// MARK: - 消耗品购买历史视图
+
+struct ConsumablePurchaseHistoryView: View {
+    let product: Product
+    @ObservedObject var viewModel: StoreExampleViewModel
+    @State private var purchaseHistory: [TransactionHistory] = []
+    @State private var isLoading = false
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            List {
+                if isLoading {
+                    ProgressView()
+                } else if purchaseHistory.isEmpty {
+                    Text("暂无购买记录")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(purchaseHistory, id: \.transactionId) { history in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("购买时间")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(formatDate(history.purchaseDate))
+                                    .font(.caption)
+                            }
+                            
+                            HStack {
+                                Text("交易ID")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(String(history.transactionId))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            if history.isRefunded {
+                                Label("已退款", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                            }
+                            
+                            if history.isRevoked {
+                                Label("已撤销", systemImage: "xmark.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle(product.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+            .task {
+                await loadHistory()
+            }
+        }
+    }
+    
+    private func loadHistory() async {
+        isLoading = true
+        let history = await viewModel.getConsumablePurchaseHistory(for: product.id)
+        await MainActor.run {
+            purchaseHistory = history
+            isLoading = false
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = TimeZone.current
+        return formatter.string(from: date)
     }
 }
 

@@ -56,28 +56,6 @@ public struct StoreKitConverter {
         return TransactionConverter.toJSONString(transactions)
     }
     
-    // MARK: - TransactionHistory 转换
-    
-    /// 将 TransactionHistory 转换为 Dictionary
-    public static func transactionHistoryToDictionary(_ history: TransactionHistory) -> [String: Any] {
-        return TransactionHistoryConverter.toDictionary(history)
-    }
-    
-    /// 将 TransactionHistory 数组转换为 Dictionary 数组
-    public static func transactionHistoriesToDictionaryArray(_ histories: [TransactionHistory]) -> [[String: Any]] {
-        return TransactionHistoryConverter.toDictionaryArray(histories)
-    }
-    
-    /// 将 TransactionHistory 转换为 JSON 字符串
-    public static func transactionHistoryToJSONString(_ history: TransactionHistory) -> String? {
-        return TransactionHistoryConverter.toJSONString(history)
-    }
-    
-    /// 将 TransactionHistory 数组转换为 JSON 字符串
-    public static func transactionHistoriesToJSONString(_ histories: [TransactionHistory]) -> String? {
-        return TransactionHistoryConverter.toJSONString(histories)
-    }
-    
     // MARK: - StoreKitState 转换
     
     /// 将 StoreKitState 转换为 Dictionary
