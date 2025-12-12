@@ -143,8 +143,14 @@ class MyStoreManager: StoreKitDelegate {
             print("购买已撤销: \(productId)")
             // 撤销功能，通知用户
             
-        case .subscriptionCancelled(let productId):
-            print("订阅已取消: \(productId)")
+        case .subscriptionCancelled(let productId, let isFreeTrialCancelled):
+            if isFreeTrialCancelled {
+                print("订阅已取消（免费试用期）: \(productId)")
+                // 处理免费试用期取消：可以引导用户重新订阅
+            } else {
+                print("订阅已取消（付费订阅期）: \(productId)")
+                // 处理付费订阅期取消：显示订阅将在XX日期过期
+            }
             // 更新订阅状态UI
             
         case .error(let error):
@@ -313,9 +319,15 @@ class MyStoreViewController {
                 self.showMessage("购买已撤销，功能已禁用")
                 self.revokeFeature(for: productId)
                 
-            case .subscriptionCancelled(let productId):
-                print("订阅已取消: \(productId)")
-                self.showMessage("订阅已取消")
+            case .subscriptionCancelled(let productId, let isFreeTrialCancelled):
+                if isFreeTrialCancelled {
+                    print("订阅已取消（免费试用期）: \(productId)")
+                    self.showMessage("免费试用已取消")
+                    // 可以引导用户重新订阅
+                } else {
+                    print("订阅已取消（付费订阅期）: \(productId)")
+                    self.showMessage("订阅已取消，将在当前周期结束时过期")
+                }
                 self.updateSubscriptionStatus(.expired)
                 
             case .error(let error):
@@ -668,7 +680,7 @@ public enum StoreKitState {
     case restorePurchasesFailed(Error)  // 恢复购买失败
     case purchaseRefunded(String)      // 购买已退款
     case purchaseRevoked(String)        // 购买已撤销
-    case subscriptionCancelled(String)  // 订阅已取消
+    case subscriptionCancelled(String, isFreeTrialCancelled: Bool)  // 订阅已取消，第二个参数表示是否在免费试用期取消
     case error(Error)                   // 发生错误
 }
 ```
@@ -802,9 +814,14 @@ func storeKit(_ manager: StoreKit2Manager, didUpdateState state: StoreKitState) 
     case .purchaseRevoked(let productId):
         print("购买已撤销: \(productId)")
         // 撤销用户权限
-    case .subscriptionCancelled(let productId):
-        print("订阅已取消: \(productId)")
-        // 处理订阅取消
+    case .subscriptionCancelled(let productId, let isFreeTrialCancelled):
+        if isFreeTrialCancelled {
+            print("订阅已取消（免费试用期）: \(productId)")
+            // 处理免费试用期取消
+        } else {
+            print("订阅已取消（付费订阅期）: \(productId)")
+            // 处理付费订阅期取消
+        }
     default:
         break
     }
