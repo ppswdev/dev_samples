@@ -37,7 +37,7 @@ platform :ios, '15.0'
 target 'YourApp' do
   use_frameworks!
   
-  pod 'StoreKit2Manager', '~> 1.0.0'
+  pod 'StoreKit2Manager'
 end
 ```
 
@@ -646,50 +646,6 @@ Task {
 // 注意：系统会根据用户的使用情况决定是否显示评价弹窗
 // 每个应用在每个版本中最多显示 3 次评价请求
 StoreKit2Manager.shared.requestReview()
-```
-
-## 配置文件格式
-
-### Plist 格式 (StoreKitConfig.plist)
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>productIds</key>
-    <array>
-        <string>premium.lifetime</string>
-        <string>subscription.monthly</string>
-        <string>subscription.yearly</string>
-    </array>
-    <key>lifetimeIds</key>
-    <array>
-        <string>premium.lifetime</string>
-    </array>
-    <key>nonRenewableExpirationDays</key>
-    <integer>365</integer>
-    <key>autoSortProducts</key>
-    <true/>
-</dict>
-</plist>
-```
-
-### JSON 格式 (StoreKitConfig.json)
-
-```json
-{
-    "productIds": [
-        "premium.lifetime",
-        "subscription.monthly",
-        "subscription.yearly"
-    ],
-    "lifetimeIds": [
-        "premium.lifetime"
-    ],
-    "nonRenewableExpirationDays": 365,
-    "autoSortProducts": true
-}
 ```
 
 ## 状态枚举

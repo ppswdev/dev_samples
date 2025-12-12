@@ -69,11 +69,6 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             errorMessage = nil
             print("正在加载产品...")
             
-        case .productsLoaded(let products):
-            isLoading = false
-            self.products = products
-            print("✅ 产品加载成功: \(products.count) 个")
-            
         case .loadingPurchases:
             isLoading = true
             print("正在加载已购买交易...")
