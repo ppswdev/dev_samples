@@ -44,7 +44,8 @@ struct StoreExampleView: View {
                             ProductRow(
                                 product: product,
                                 isPurchased: viewModel.isPurchased(product),
-                                onPurchase: { viewModel.purchase(product) }
+                                onPurchase: { viewModel.purchase(product) },
+                                viewModel: viewModel
                             )
                         }
                     }
@@ -57,7 +58,8 @@ struct StoreExampleView: View {
                             ProductRow(
                                 product: product,
                                 isPurchased: viewModel.isPurchased(product),
-                                onPurchase: { viewModel.purchase(product) }
+                                onPurchase: { viewModel.purchase(product) },
+                                viewModel: viewModel
                             )
                         }
                     }
@@ -157,15 +159,27 @@ struct ProductRow: View {
     let product: Product
     let isPurchased: Bool
     let onPurchase: () -> Void
+    @ObservedObject var viewModel: StoreExampleViewModel
     
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(product.displayName)
-                    .font(.headline)
-                Text(product.description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // 显示产品标题（如果有）
+                if let displayInfo = viewModel.productDisplayInfo[product.id] {
+                    Text(displayInfo.title)
+                        .font(.headline)
+                    Text(displayInfo.subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    // 后备：显示默认信息
+                    Text(product.displayName)
+                        .font(.headline)
+                    Text(product.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
                 Text(product.displayPrice)
                     .font(.subheadline)
                     .foregroundColor(.blue)
@@ -178,10 +192,19 @@ struct ProductRow: View {
                     .foregroundColor(.green)
                     .font(.caption)
             } else {
-                Button("购买") {
-                    onPurchase()
+                // 显示按钮文本（如果有）
+                if let displayInfo = viewModel.productDisplayInfo[product.id] {
+                    Button(displayInfo.buttonText) {
+                        onPurchase()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    // 后备：显示默认按钮
+                    Button("购买") {
+                        onPurchase()
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
         .padding(.vertical, 4)
@@ -372,17 +395,27 @@ struct SubscriptionProductRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(product.displayName)
-                        .font(.headline)
-                    Text(product.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    // 显示订阅周期
-                    if let subscription = product.subscription {
-                        Text("周期: \(subscription.subscriptionPeriod.displayName)")
+                    // 显示产品标题（如果有）
+                    if let displayInfo = viewModel.productDisplayInfo[product.id] {
+                        Text(displayInfo.title)
+                            .font(.headline)
+                        Text(displayInfo.subtitle)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    } else {
+                        // 后备：显示默认信息
+                        Text(product.displayName)
+                            .font(.headline)
+                        Text(product.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        // 显示订阅周期
+                        if let subscription = product.subscription {
+                            Text("周期: \(subscription.subscriptionPeriod.displayName)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                     
                     Text(product.displayPrice)
@@ -408,10 +441,19 @@ struct SubscriptionProductRow: View {
                         .font(.caption2)
                     }
                 } else {
-                    Button("订阅") {
-                        onPurchase()
+                    // 显示按钮文本（如果有）
+                    if let displayInfo = viewModel.productDisplayInfo[product.id] {
+                        Button(displayInfo.buttonText) {
+                            onPurchase()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        // 后备：显示默认按钮
+                        Button("订阅") {
+                            onPurchase()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             }
         }

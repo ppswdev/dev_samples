@@ -255,11 +255,7 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "B16ABC04",
-          "introductoryOffer" : {
-            "internalID" : "4C9FF7DF",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
+          "introductoryOffer" : null,
           "localizations" : [
             {
               "description" : "Monthly VIP of in app",
@@ -287,11 +283,7 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "194AEF91",
-          "introductoryOffer" : {
-            "internalID" : "C06A3A9D",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P1W"
-          },
+          "introductoryOffer" : null,
           "localizations" : [
             {
               "description" : "Yearly vip of in app",

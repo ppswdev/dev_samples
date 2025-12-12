@@ -21,6 +21,17 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     @Published var showAlert = false
     @Published var subscriptionInfo: SubscriptionInfo?
     
+    /// 产品显示信息
+    struct ProductDisplayInfo {
+        let productId: String
+        let title: String
+        let subtitle: String
+        let buttonText: String
+    }
+    
+    /// 产品显示信息字典，key 为 productId
+    @Published var productDisplayInfo: [String: ProductDisplayInfo] = [:]
+    
     // 从 StoreProducts.storekit 获取的产品ID
     private let productIds = [
         //消耗品
@@ -145,6 +156,95 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     func storeKit(_ manager: StoreKit2Manager, didLoadProducts products: [Product]) {
         self.products = products
+        
+        // 为每个产品生成显示信息
+        Task {
+            await loadProductDisplayInfo(products: products)
+        }
+    }
+    
+    /// 加载产品的显示信息（标题、副标题、按钮文本）
+    /// - Parameter products: 产品数组
+    private func loadProductDisplayInfo(products: [Product]) async {
+        // 获取当前语言代码
+        let languageCode = "zh_Hans"
+        
+        var displayInfoDict: [String: ProductDisplayInfo] = [:]
+        
+        for product in products {
+            // 确定周期类型
+            let periodType = determinePeriodType(for: product)
+            
+            // 获取标题
+            let title = StoreKit2Manager.shared.productForVipTitle(
+                for: product.id,
+                periodType: periodType,
+                languageCode: languageCode,
+                isShort: false
+            )
+            
+            // 获取副标题（异步）
+            let subtitle = await StoreKit2Manager.shared.productForVipSubtitle(
+                for: product.id,
+                periodType: periodType,
+                languageCode: languageCode
+            )
+            
+            // 获取按钮文本（异步）
+            let buttonText = await StoreKit2Manager.shared.productForVipButtonText(
+                for: product.id,
+                languageCode: languageCode
+            )
+            
+            // 存储显示信息
+            displayInfoDict[product.id] = ProductDisplayInfo(
+                productId: product.id,
+                title: title,
+                subtitle: subtitle,
+                buttonText: buttonText
+            )
+        }
+        
+        // 更新 UI
+        self.productDisplayInfo = displayInfoDict
+        
+        // 打印显示信息（用于调试）
+        print("=== 产品显示信息 ===")
+        for (productId, info) in displayInfoDict {
+            print("产品ID: \(productId)")
+            print("  标题: \(info.title)")
+            print("  副标题: \(info.subtitle)")
+            print("  按钮文本: \(info.buttonText)")
+            print("---")
+        }
+    }
+    
+    /// 确定产品的周期类型
+    /// - Parameter product: 产品对象
+    /// - Returns: 订阅周期类型
+    private func determinePeriodType(for product: Product) -> SubscriptionPeriodType {
+        // 检查是否是终身会员
+        if lifetimeIds.contains(product.id) {
+            return .lifetime
+        }
+        
+        // 检查是否有订阅信息
+        if let subscription = product.subscription {
+            let unit = SubscriptionLocale.getUnit(from: subscription.subscriptionPeriod)
+            switch unit {
+            case "week":
+                return .week
+            case "month":
+                return .month
+            case "year":
+                return .year
+            default:
+                return .month // 默认返回月
+            }
+        }
+        
+        // 默认返回月
+        return .month
     }
     
     func storeKit(_ manager: StoreKit2Manager, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
