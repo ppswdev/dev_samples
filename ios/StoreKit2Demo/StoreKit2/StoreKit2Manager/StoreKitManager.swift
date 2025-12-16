@@ -133,7 +133,7 @@ public class StoreKit2Manager {
     /// - Note: 会异步从 App Store 拉取最新的产品信息，更新本地产品列表
     /// - Returns: 刷新后的产品列表，如果刷新失败返回 nil
     public func refreshProducts() async {
-        await service?.loadProducts()
+       let _ = await service?.loadProducts()
     }
     
     /// 获取所有产品
@@ -185,7 +185,7 @@ public class StoreKit2Manager {
     /// - Parameter isShort: 是否短标题
     /// - Returns: 本地化的产品标题
     public func productForVipTitle(for productId: String, periodType: SubscriptionPeriodType , languageCode: String, isShort: Bool = false) -> String {
-        guard let product = product(for: productId) else {
+        guard let _ = product(for: productId) else {
             return ""
         }
         return SubscriptionLocale.subscriptionTitle(
@@ -329,7 +329,7 @@ public class StoreKit2Manager {
     
     /// 手动刷新已购买产品交易信息，包括：有效的订阅交易信息，每个产品的最新交易信息
     public func refreshPurchases() async {
-        await service?.loadPurchasedTransactions()
+        await service?.loadValidTransactions()
     }
     
     // MARK: - 查询方法

@@ -22,26 +22,26 @@ public enum StoreKitState {
     /// 已购买产品加载完成
     case purchasesLoaded
     
-    /// 正在购买指定产品
-    case purchasing(String) // 产品ID
+    /// 正在购买指定产品，返回：产品ID
+    case purchasing(String)
     
-    /// 购买待处理（需要用户操作）
-    case purchasePending(String) // 产品ID
+    /// 购买待处理（需要用户操作），返回：产品ID
+    case purchasePending(String)
     
-    /// 用户取消购买
-    case purchaseCancelled(String) // 产品ID
+    /// 用户取消购买，返回：产品ID
+    case purchaseCancelled(String)
     
-    /// 购买成功
-    case purchaseSuccess(String) // 产品ID
+    /// 购买成功，返回：产品ID
+    case purchaseSuccess(String)
     
-    /// 购买失败
-    case purchaseFailed(String, Error) // 产品ID, 错误
+    /// 购买失败，返回：产品ID, 错误描述
+    case purchaseFailed(String, String)
     
-    /// 购买已退款
-    case purchaseRefunded(String) // 产品ID
+    /// 购买已退款，返回：产品ID
+    case purchaseRefunded(String)
     
-    /// 购买已撤销
-    case purchaseRevoked(String) // 产品ID
+    /// 购买已撤销，返回：产品ID
+    case purchaseRevoked(String)
     
     /// 正在恢复购买
     case restoringPurchases
@@ -49,16 +49,13 @@ public enum StoreKitState {
     /// 恢复购买成功
     case restorePurchasesSuccess
     
-    /// 恢复购买失败
-    case restorePurchasesFailed(Error)
+    /// 恢复购买失败，返回：错误描述
+    case restorePurchasesFailed(String)
     
-    /// 订阅已取消
-    /// - Parameters:
-    ///   - productId: 产品ID
-    ///   - isFreeTrialCancelled: 是否在免费试用期取消（true 表示在免费试用期内取消，false 表示在付费订阅期内取消）
+    /// 订阅已取消，返回：产品ID, 是否在免费试用期内取消
     case subscriptionCancelled(String, isFreeTrialCancelled: Bool)
     
-    /// 发生错误
-    case error(Error)
+    /// 发生错误，返回：错误描述
+    case error(String)
 }
 

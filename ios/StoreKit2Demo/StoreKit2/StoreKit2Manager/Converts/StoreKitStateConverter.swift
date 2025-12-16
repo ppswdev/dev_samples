@@ -51,10 +51,10 @@ public struct StoreKitStateConverter {
             dict["type"] = "purchaseCancelled"
             dict["productId"] = productId
             
-        case .purchaseFailed(let productId, let error):
+        case .purchaseFailed(let productId, let errorMessage):
             dict["type"] = "purchaseFailed"
             dict["productId"] = productId
-            dict["error"] = String(describing: error)
+            dict["error"] = errorMessage
             
 //        case .subscriptionStatusChanged(let renewalState):
 //            dict["type"] = "subscriptionStatusChanged"
@@ -66,9 +66,9 @@ public struct StoreKitStateConverter {
         case .restorePurchasesSuccess:
             dict["type"] = "restorePurchasesSuccess"
             
-        case .restorePurchasesFailed(let error):
+        case .restorePurchasesFailed(let errorMessage):
             dict["type"] = "restorePurchasesFailed"
-            dict["error"] = String(describing: error)
+            dict["error"] = errorMessage
             
         case .purchaseRefunded(let productId):
             dict["type"] = "purchaseRefunded"
@@ -83,9 +83,9 @@ public struct StoreKitStateConverter {
             dict["productId"] = productId
             dict["isFreeTrialCancelled"] = isFreeTrialCancelled
             
-        case .error(let error):
+        case .error(let errorMessage):
             dict["type"] = "error"
-            dict["error"] = String(describing: error)
+            dict["error"] = errorMessage
         }
         
         return dict

@@ -105,10 +105,10 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             isLoading = false
             print("❌ 用户取消购买: \(productId)")
             
-        case .purchaseFailed(let productId, let error):
+        case .purchaseFailed(let productId, let errorMessage):
             isLoading = false
-            errorMessage = "购买失败: \(productId)\n\(error.localizedDescription)"
-            print("❌ 购买失败: \(error)")
+            errorMessage = "购买失败: \(productId)\n\(errorMessage)"
+            print("❌ 购买失败: \(errorMessage)")
             
         case .restoringPurchases:
             isLoading = true
@@ -121,10 +121,10 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
                 await refreshPurchases()
             }
             
-        case .restorePurchasesFailed(let error):
+        case .restorePurchasesFailed(let errorMessage):
             isLoading = false
-            errorMessage = "恢复购买失败: \(error.localizedDescription)"
-            print("❌ 恢复购买失败: \(error)")
+            errorMessage = "恢复购买失败: \(errorMessage)"
+            print("❌ 恢复购买失败: \(errorMessage)")
             
         case .purchaseRefunded(let productId):
             print("⚠️ 购买已退款: \(productId)")
@@ -144,10 +144,10 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
                 await refreshPurchases()
             }
             
-        case .error(let error):
+        case .error(let errorMessage):
             isLoading = false
-            errorMessage = error.localizedDescription
-            print("❌ 发生错误: \(error)")
+            errorMessage = errorMessage
+            print("❌ 发生错误: \(errorMessage)")
             
         default:
             break

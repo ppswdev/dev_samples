@@ -98,7 +98,7 @@ internal class StoreKitService: ObservableObject {
         Task {
             await clearUnfinishedTransactions()
             await loadProducts()
-            await loadPurchasedTransactions()
+            await loadValidTransactions()
             
             // 初始检查订阅状态
             await checkSubscriptionStatus()
@@ -138,14 +138,14 @@ internal class StoreKitService: ObservableObject {
             self.allProducts = products
             return products
         } catch {
-            currentState = .error(error)
+            currentState = .error(error.localizedDescription)
             return nil
         }
     }
     
     /// 获取所有有效的非消耗品和订阅交易信息集合
     @MainActor
-    func loadPurchasedTransactions() async {
+    func loadValidTransactions() async {
         currentState = .loadingPurchases
         
         // 使用 TaskGroup 并行获取所有产品的最新交易记录
@@ -205,7 +205,7 @@ internal class StoreKitService: ObservableObject {
                     print("未完成交易，交易验证失败，产品ID: \(transaction.productID) 错误\(error.localizedDescription)")
                     
                     // 更新状态
-                    currentState = .error(StoreKitError.verificationFailed)
+                    currentState = .error(StoreKitError.verificationFailed.localizedDescription)
                 }
                 
                 // 注意：验证失败时不要调用 finish()
@@ -266,7 +266,7 @@ internal class StoreKitService: ObservableObject {
                     
                     // 然后刷新购买列表（消耗品不需要）
                     if product.type != .consumable {
-                        await loadPurchasedTransactions()
+                        await loadValidTransactions()
                     }
                     
                     await MainActor.run {
@@ -275,7 +275,7 @@ internal class StoreKitService: ObservableObject {
                     continuation.resume()
                 } catch {
                     await MainActor.run {
-                        currentState = .purchaseFailed(product.id, error)
+                        currentState = .purchaseFailed(product.id, error.localizedDescription)
                     }
                     continuation.resume(throwing: error)
                 }
@@ -295,13 +295,13 @@ internal class StoreKitService: ObservableObject {
             @unknown default:
                 let error = StoreKitError.unknownError
                 await MainActor.run {
-                    currentState = .purchaseFailed(product.id, error)
+                    currentState = .purchaseFailed(product.id, error.localizedDescription)
                 }
                 continuation.resume(throwing: error)
             }
         } catch {
             await MainActor.run {
-                currentState = .purchaseFailed(product.id, error)
+                currentState = .purchaseFailed(product.id, error.localizedDescription)
             }
             continuation.resume(throwing: error)
         }
@@ -318,10 +318,10 @@ internal class StoreKitService: ObservableObject {
             /// - 重要提示：此操作会提示用户进行身份验证，仅在用户交互时调用此函数。
             /// - 异常情况：如果用户身份验证不成功，或者 StoreKit 无法连接到 App Store。
             try await AppStore.sync()
-            await loadPurchasedTransactions()
+            await loadValidTransactions()
             currentState = .restorePurchasesSuccess
         } catch {
-            currentState = .restorePurchasesFailed(error)
+            currentState = .restorePurchasesFailed(error.localizedDescription)
             throw StoreKitError.restorePurchasesFailed(error)
         }
     }
@@ -333,7 +333,7 @@ internal class StoreKitService: ObservableObject {
         do {
             try await AppStore.sync()
              // 重新获取已购买产品（会更新订阅状态）
-            await loadPurchasedTransactions()
+            await loadValidTransactions()
         } catch {
             print("同步 App Store 状态失败: \(error)")
         }
@@ -524,7 +524,7 @@ internal class StoreKitService: ObservableObject {
                         }
                     }
                     
-                    await self.loadPurchasedTransactions()
+                    await self.loadValidTransactions()
                     
                     await transaction.finish()
                 } catch {
@@ -841,7 +841,7 @@ extension StoreKitService{
                 if let windowScene = windowScene {
                     try await AppStore.showManageSubscriptions(in: windowScene)
                     
-                    await loadPurchasedTransactions()
+                    await loadValidTransactions()
                     
                     return true
                 } else {
@@ -907,7 +907,7 @@ extension StoreKitService{
             try await AppStore.presentOfferCodeRedeemSheet(in: windowScene)
             // 兑换后的交易会通过 Transaction.updates 自动处理
             // 这里可以刷新购买列表以确保数据同步
-            await loadPurchasedTransactions()
+            await loadValidTransactions()
         } catch {
             throw StoreKitError.purchaseFailed(error)
         }
@@ -934,7 +934,11 @@ extension StoreKitService{
             // iOS 15.0 (以及 iOS 10.3-15.x) 使用 StoreKit 1 的 API
             // 在 iOS 15 中，StoreKit 2 存在，但 AppStore.requestReview 需要 iOS 16+
             // 所以回退到 StoreKit 1 的 SKStoreReviewController
-            SKStoreReviewController.requestReview()
+            if let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first {
+                SKStoreReviewController.requestReview(in: windowScene)
+            }
         }
         #elseif os(macOS)
         if #available(macOS 13.0, *) {
@@ -961,7 +965,7 @@ extension StoreKitService{
     /// 通知已购买交易订单更新（在主线程执行）
     @MainActor
     private func notifyPurchasedTransactionsUpdated(_ validTrans: [Transaction], _ latestTrans: [Transaction]) {
-        delegate?.service(self, didUpdatePurchasedTransactions: validTrans, latests: latestTrans)
+        delegate?.service(self, didUpdatePurchasedTransactions: validTrans, latestTrans: latestTrans)
     }
     
     /// 通知状态变化（在主线程执行）
