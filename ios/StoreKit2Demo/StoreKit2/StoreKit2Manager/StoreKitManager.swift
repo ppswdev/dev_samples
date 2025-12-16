@@ -25,23 +25,23 @@ public enum SubscriptionButtonType: String {
     case lifetime = "lifetime"        // 终身会员
 }
 
+/// 交易类型别名
+public typealias Transaction = StoreKit.Transaction
+
 /// 订阅信息类型别名
 public typealias SubscriptionInfo = StoreKit.Product.SubscriptionInfo
 
-/// 订阅状态类型别名
-public typealias SubscriptionStatus = StoreKit.Product.SubscriptionInfo.Status
-
 /// 订阅周期类型别名
 public typealias SubscriptionPeriod = StoreKit.Product.SubscriptionPeriod
+
+/// 订阅状态类型别名
+public typealias SubscriptionStatus = StoreKit.Product.SubscriptionInfo.Status
 
 /// 续订信息类型别名
 public typealias RenewalInfo = StoreKit.Product.SubscriptionInfo.RenewalInfo
 
 /// 续订状态类型别名
 public typealias RenewalState = StoreKit.Product.SubscriptionInfo.RenewalState
-
-/// 交易类型别名
-public typealias Transaction = StoreKit.Transaction
 
 /// StoreKit 管理器
 /// 提供统一的接口来管理应用内购买
@@ -74,8 +74,8 @@ public class StoreKit2Manager {
     /// 所有产品
     public private(set) var allProducts: [Product] = []
     
-    /// 已购买有效的交易信息
-    public private(set) var purchasedTransactions: [Transaction] = []
+    /// 有效的购买订单
+    public private(set) var validTransactions: [Transaction] = []
     
     /// 每个产品的最新交易记录集合
     public private(set) var latestTransactions: [Transaction] = []
@@ -370,7 +370,7 @@ public class StoreKit2Manager {
     /// 获取有效的已购买交易
     /// - Returns: 有效（未过期、未撤销、未退款）的已购买交易数组
     public func getValidPurchasedTransactions() async -> [Transaction] {
-        return purchasedTransactions
+        return validTransactions
     }
 
     /// 获取每个产品的最新交易
@@ -523,14 +523,14 @@ extension StoreKit2Manager: StoreKitServiceDelegate {
     }
     
     @MainActor
-    func service(_ service: StoreKitService, didUpdatePurchasedTransactions efficient: [Transaction], latests: [Transaction]) {
-        purchasedTransactions = efficient
+    func service(_ service: StoreKitService, didUpdatePurchasedTransactions validTrans: [Transaction], latestTrans: [Transaction]) {
+        validTransactions = validTrans
         
         // 通知代理
-        delegate?.storeKit(self, didUpdatePurchasedTransactions: efficient, latests: latests)
+        delegate?.storeKit(self, didUpdatePurchasedTransactions: validTrans, latests: latestTrans)
         
         // 通知闭包回调
-        onPurchasedTransactionsUpdated?(efficient, latests)
+        onPurchasedTransactionsUpdated?(validTrans, latestTrans)
     }
 }
 

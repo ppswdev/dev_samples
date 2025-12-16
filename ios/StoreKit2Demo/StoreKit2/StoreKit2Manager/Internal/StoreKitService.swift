@@ -23,7 +23,7 @@ internal class StoreKitService: ObservableObject {
     /// 所有产品
     @Published private(set) var allProducts: [Product] = []
     /// 所有有效的非消耗和订阅交易记录集合
-    @Published private(set) var purchasedTransactions: [Transaction] = []
+    @Published private(set) var validTransactions: [Transaction] = []
     /// 每个产品的最新交易记录集合
     @Published private(set) var latestTransactions: [Transaction] = []
     
@@ -182,7 +182,7 @@ internal class StoreKitService: ObservableObject {
                 purchasedTransactions.append(transaction)
             }
         }
-        self.purchasedTransactions = purchasedTransactions
+        self.validTransactions = purchasedTransactions
         
         currentState = .purchasesLoaded
     }
@@ -332,12 +332,11 @@ internal class StoreKitService: ObservableObject {
         // 同步 App Store 的购买状态
         do {
             try await AppStore.sync()
+             // 重新获取已购买产品（会更新订阅状态）
+            await loadPurchasedTransactions()
         } catch {
             print("同步 App Store 状态失败: \(error)")
         }
-        
-        // 重新获取已购买产品（会更新订阅状态）
-        await loadPurchasedTransactions()
     }
     
     
@@ -415,7 +414,7 @@ internal class StoreKitService: ObservableObject {
             .store(in: &cancellables)
         
         // 监听已购买产品变化
-        $purchasedTransactions
+        $validTransactions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] transactions in
                 guard let self = self else { return }
@@ -589,8 +588,7 @@ internal class StoreKitService: ObservableObject {
     private func checkSubscriptionStatus() async {
         // 获取所有已购买的自动续订订阅
         let purchasedSubscriptions = allProducts.filter { product in
-            product.type == .autoRenewable && 
-            purchasedTransactions.contains(where: { $0.productID == product.id })
+            product.type == .autoRenewable
         }
         
         // 如果没有订阅，直接返回
@@ -962,8 +960,8 @@ extension StoreKitService{
     
     /// 通知已购买交易订单更新（在主线程执行）
     @MainActor
-    private func notifyPurchasedTransactionsUpdated(_ efficient: [Transaction], _ latests: [Transaction]) {
-        delegate?.service(self, didUpdatePurchasedTransactions: efficient, latests: latests)
+    private func notifyPurchasedTransactionsUpdated(_ validTrans: [Transaction], _ latestTrans: [Transaction]) {
+        delegate?.service(self, didUpdatePurchasedTransactions: validTrans, latests: latestTrans)
     }
     
     /// 通知状态变化（在主线程执行）

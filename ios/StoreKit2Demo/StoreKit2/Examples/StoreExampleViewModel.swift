@@ -280,7 +280,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     /// 刷新已购买产品
     func refreshPurchases() async {
         await StoreKit2Manager.shared.refreshPurchases()
-        self.purchasedTransactions = StoreKit2Manager.shared.purchasedTransactions
+        self.purchasedTransactions = StoreKit2Manager.shared.validTransactions
         self.latestTransactions = StoreKit2Manager.shared.latestTransactions
     }
     
