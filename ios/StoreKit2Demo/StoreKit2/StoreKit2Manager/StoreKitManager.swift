@@ -138,7 +138,7 @@ public class StoreKit2Manager {
     
     /// 获取所有产品
     /// - Returns: 当前已知的全部产品列表
-    public func getAllProducts() async -> [Product] {                                                                                                                                                                                                                                                                                                                                                                                             
+    public func getAllProducts() async -> [Product] {
         if(allProducts.isEmpty){
             if let products = await service?.loadProducts() {
                 allProducts = products
@@ -324,7 +324,7 @@ public class StoreKit2Manager {
     /// 恢复购买
     /// - Throws: StoreKit2Error.restorePurchasesFailed 如果恢复失败
     public func restorePurchases() async throws {
-        try await service?.restorePurchases()
+        await service?.restorePurchases()
     }
     
     /// 手动刷新已购买产品交易信息，包括：有效的订阅交易信息，每个产品的最新交易信息
@@ -364,6 +364,87 @@ public class StoreKit2Manager {
             return false
         }
         return await subscription.isEligibleForIntroOffer
+    }
+
+    /// 检查产品是否在有效订阅期间内但在免费试用期已取消
+    /// - Parameter productId: 产品ID
+    /// - Returns: 如果在有效订阅期间内但在免费试用期取消返回 true，否则返回 false
+    /// - Note: 仅对支持订阅的产品有效
+    /// - Note: 只有在订阅状态为 .subscribed（有效订阅）且已取消（willAutoRenew == false）且在免费试用期时，才返回 true
+    public func isSubscribedButFreeTrailCancelled(productId: String) async -> Bool {
+        // 获取产品
+        guard let product = allProducts.first(where: { $0.id == productId }) else {
+            return false
+        }
+        
+        // 检查是否是订阅产品
+        guard let subscription = product.subscription else {
+            return false
+        }
+        
+        do {
+            // 获取订阅状态
+            let statuses = try await subscription.status
+            guard let currentStatus = statuses.first else {
+                return false
+            }
+            
+            // 首先检查订阅状态是否为 .subscribed（有效订阅）
+            // 只有在有效订阅期间内才需要判断
+            guard currentStatus.state == .subscribed else {
+                return false
+            }
+            
+            // 检查是否已取消（willAutoRenew == false）
+            var isCancelled = false
+            if case .verified(let renewalInfo) = currentStatus.renewalInfo {
+                isCancelled = !renewalInfo.willAutoRenew
+            }
+            
+            // 如果未取消，直接返回 false
+            guard isCancelled else {
+                return false
+            }
+            
+            // 检查是否在免费试用期
+            var isFreeTrial = false
+            if case .verified(let transaction) = currentStatus.transaction {
+                isFreeTrial = isFreeTrialTransaction(transaction)
+            }
+            
+            // 只有在有效订阅期间内、已取消且处于免费试用期时，才返回 true
+            return isFreeTrial
+        } catch {
+            print("获取订阅状态失败: \(productId), 错误: \(error)")
+            return false
+        }
+    }
+    
+    /// 判断 Transaction 是否在免费试用期（私有辅助方法）
+    /// - Parameter transaction: Transaction 对象
+    /// - Returns: 如果在免费试用期返回 true，否则返回 false
+    private func isFreeTrialTransaction(_ transaction: Transaction) -> Bool {
+        // iOS 17.2+ 使用新的 offer 属性
+        if #available(iOS 17.2, macOS 14.2, tvOS 17.2, watchOS 10.2, visionOS 2.4, *) {
+            if let offer = transaction.offer {
+                // 检查优惠类型和支付模式
+                if offer.type == .introductory,
+                   offer.paymentMode == .freeTrial {
+                    return true
+                }
+            }
+        } else {
+            // iOS 15.0 - iOS 17.1 使用已废弃的属性
+            if let offerType = transaction.offerType,
+               let paymentMode = transaction.offerPaymentModeStringRepresentation {
+                if offerType == .introductory,
+                   paymentMode == "freeTrial" {
+                    return true
+                }
+            }
+        }
+        
+        return false
     }
    
     // MARK: - 交易相关

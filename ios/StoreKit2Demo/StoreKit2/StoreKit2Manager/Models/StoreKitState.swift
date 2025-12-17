@@ -55,8 +55,9 @@ public enum StoreKitState {
     /// 恢复购买失败，返回：错误描述
     case restorePurchasesFailed(String)
     
-    /// 订阅已取消，返回：产品ID, 是否在免费试用期内取消
-    case subscriptionCancelled(String, isFreeTrialCancelled: Bool)
+    /// 订阅已取消，返回：产品ID, 是否在有效订阅期间内但在免费试用期取消
+    /// - Note: isSubscribedButFreeTrailCancelled 为 true 表示产品或交易订单是在有效订阅期间内，但是在免费试用期取消了订阅
+    case subscriptionCancelled(String, isSubscribedButFreeTrailCancelled: Bool)
     
     /// 发生错误，返回：触发位置，描述说明，错误对战详情
     case error(String, String, String)

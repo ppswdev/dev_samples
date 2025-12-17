@@ -457,16 +457,13 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                     await MainActor.run {
                         if transaction.productType == .autoRenewable {
                             // 订阅产品被撤销/退款
-                            // 检查是否在免费试用期（通过交易中的 offer 信息判断）
-                            // 如果用户在免费试用期内退款，isFreeTrialCancelled 应该为 true
-                            let isFreeTrialCancelled = self.isFreeTrialTransaction(transaction)
-                            
-                            // 触发订阅取消通知（虽然实际上是撤销，但使用相同的状态）
-                            // 外部可以通过 isFreeTrialCancelled 来区分是否在免费试用期
-                            currentState = .subscriptionCancelled(transaction.productID, isFreeTrialCancelled: isFreeTrialCancelled)
+                            // 注意：撤销/退款后订阅立即失效，不再是"有效订阅期间内"
+                            // 所以 isSubscribedButFreeTrailCancelled 应该为 false
+                            // 这里使用 false，因为撤销/退款不是"有效订阅期间内"的情况
+                            self.currentState = .subscriptionCancelled(transaction.productID, isSubscribedButFreeTrailCancelled: false)
                         } else {
                             // 非订阅产品被退款
-                            currentState = .purchaseRefunded(transaction.productID)
+                            self.currentState = .purchaseRefunded(transaction.productID)
                         }
                     }
                 }
@@ -597,18 +594,15 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                         await MainActor.run {
                             if transaction.productType == .autoRenewable {
                                 // 订阅产品被撤销/退款
-                                // 检查是否在免费试用期（通过交易中的 offer 信息判断）
-                                // 如果用户在免费试用期内退款，isFreeTrialCancelled 应该为 true
-                                let isFreeTrialCancelled = self.isFreeTrialTransaction(transaction)
-                                
-                                // 触发订阅取消通知（虽然实际上是撤销，但使用相同的状态）
-                                // 外部可以通过 isFreeTrialCancelled 来区分是否在免费试用期
-                                print("🔔 检测到订阅取消: \(transaction.productID), isFreeTrialCancelled: \(isFreeTrialCancelled)")
-                                self.currentState = .subscriptionCancelled(transaction.productID, isFreeTrialCancelled: isFreeTrialCancelled)
+                                // 注意：撤销/退款后订阅立即失效，不再是"有效订阅期间内"
+                                // 所以 isSubscribedButFreeTrailCancelled 应该为 false
+                                // 这里使用 false，因为撤销/退款不是"有效订阅期间内"的情况
+                                print("🔔 检测到订阅撤销/退款: \(transaction.productID)")
+                                self.currentState = .subscriptionCancelled(transaction.productID, isSubscribedButFreeTrailCancelled: false)
                             } else {
                                 // 非订阅产品被退款
                                 // 有撤销日期通常表示退款
-                                print("🔔 检测到订阅退款: \(transaction.productID)")
+                                print("🔔 检测到产品退款: \(transaction.productID)")
                                 self.currentState = .purchaseRefunded(transaction.productID)
                             }
                         }
@@ -788,41 +782,44 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                    let currentInfo = renewalInfo {
                     // 检查 willAutoRenew 是否从 true 变为 false
                     if lastInfo.willAutoRenew == true && currentInfo.willAutoRenew == false {
-                        // ========== 判断是否在免费试用期取消 ==========
+                        // ========== 判断是否在有效订阅期间内，但是在免费试用期取消 ==========
                         // 判断逻辑：
-                        // 1. isFreeTrial 为 true 表示当前有效交易使用的是免费试用优惠
-                        // 2. 如果用户在免费试用期内取消订阅，isFreeTrial 应该为 true
-                        // 3. 如果用户在付费订阅期内取消订阅，isFreeTrial 应该为 false
+                        // 1. 订阅状态必须是 .subscribed（有效订阅）
+                        // 2. willAutoRenew == false（已取消）
+                        // 3. isFreeTrial 为 true 表示当前有效交易使用的是免费试用优惠
+                        // 4. 只有同时满足以上三个条件，isSubscribedButFreeTrailCancelled 才为 true
                         // 
                         // 使用场景：
-                        // - isFreeTrialCancelled = true：用户在免费试用期内取消，可以：
+                        // - isSubscribedButFreeTrailCancelled = true：在有效订阅期间内，但是在免费试用期取消，可以：
                         //   * 显示"免费试用已取消"的提示
                         //   * 提供重新订阅的引导
                         //   * 统计免费试用取消率
-                        // - isFreeTrialCancelled = false：用户在付费订阅期内取消，可以：
+                        // - isSubscribedButFreeTrailCancelled = false：在有效订阅期间内，但是在付费订阅期取消，可以：
                         //   * 显示"订阅已取消，将在XX日期过期"的提示
                         //   * 提供续订或重新订阅的引导
                         //   * 统计付费订阅取消率
-                        let isFreeTrialCancelled = isFreeTrial ?? false
+                        // 
+                        // 注意：只有在订阅状态为 .subscribed 时才判断，其他状态（如 .expired）不判断
+                        let isSubscribedButFreeTrailCancelled = (currentRenewalState == .subscribed) && (isFreeTrial ?? false)
                         
-                        // 订阅已取消，触发通知（包含是否在免费试用期取消的信息）
-                        if isFreeTrialCancelled {
-                            print("🔔 检测到订阅取消（免费试用期）: \(productId)")
-                            print("   说明：用户在免费试用期内取消了订阅，订阅将在试用期结束时失效")
+                        // 订阅已取消，触发通知（包含是否在有效订阅期间内但在免费试用期取消的信息）
+                        if isSubscribedButFreeTrailCancelled {
+                            print("🔔 检测到订阅取消（有效订阅期间内，免费试用期）: \(productId)")
+                            print("   说明：在有效订阅期间内，但是在免费试用期内取消了订阅，订阅将在试用期结束时失效")
                         } else {
-                            print("🔔 检测到订阅取消（付费订阅期）: \(productId)")
-                            print("   说明：用户在付费订阅期内取消了订阅，订阅将在当前周期结束时失效")
+                            print("🔔 检测到订阅取消（有效订阅期间内，付费订阅期）: \(productId)")
+                            print("   说明：在有效订阅期间内，但是在付费订阅期内取消了订阅，订阅将在当前周期结束时失效")
                         }
                         
-                        // 触发状态通知，包含是否在免费试用期取消的信息
+                        // 触发状态通知，包含是否在有效订阅期间内但在免费试用期取消的信息
                         // 外部可以通过这个信息来区分不同的取消场景，提供不同的处理逻辑
-                        self.currentState = .subscriptionCancelled(productId, isFreeTrialCancelled: isFreeTrialCancelled)
+                        self.currentState = .subscriptionCancelled(productId, isSubscribedButFreeTrailCancelled: isSubscribedButFreeTrailCancelled)
                         
                         // 打印过期日期信息，告知用户订阅何时失效
                         if let expirationDate = expirationDate {
                             let formatter = DateFormatter()
                             formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                            if isFreeTrialCancelled {
+                            if isSubscribedButFreeTrailCancelled {
                                 print("   免费试用将在 \(formatter.string(from: expirationDate)) 过期")
                             } else {
                                 print("   订阅将在 \(formatter.string(from: expirationDate)) 过期")
@@ -1147,7 +1144,7 @@ extension StoreKitService{
             }
         }
         
-        let productJSON = ProductConverter.toDictionary(product)
+        let productJSON = await ProductConverter.toDictionary(product)
         print("   - JSON表示: \(productJSON)")
     }
     
@@ -1387,7 +1384,7 @@ extension StoreKitService{
         print("════════════════════════════════════════")
         print("")
 
-        let transactionJSON = TransactionConverter.toDictionary(transaction)
+        let transactionJSON = await TransactionConverter.toDictionary(transaction)
         print("   - JSON表示: \(transactionJSON)")
     }
 }
