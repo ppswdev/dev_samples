@@ -138,7 +138,7 @@ public class StoreKit2Manager {
     
     /// 获取所有产品
     /// - Returns: 当前已知的全部产品列表
-    public func getAllProducts() async -> [Product] {
+    public func getAllProducts() async -> [Product] {                                                                                                                                                                                                                                                                                                                                                                                             
         if(allProducts.isEmpty){
             if let products = await service?.loadProducts() {
                 allProducts = products
@@ -301,28 +301,28 @@ public class StoreKit2Manager {
     
     // MARK: - 购买相关
     
-    /// 通过产品ID购买产品
+    /// 通过产品ID购买
     /// - Parameter productId: 产品ID
-    /// - Throws: StoreKitError.productNotFound 如果产品未找到
-    public func purchase(productId: String) async throws {
+    public func purchase(productId: String) async {
         guard let product = allProducts.first(where: { $0.id == productId }) else {
-            throw StoreKitError.productNotFound(productId)
+            currentState = .error("StoreKit2Manager.purchase","Product not found","产品未找到: \(productId)")
+            return
         }
-        try await service?.purchase(product)
+        await service?.purchase(product)
     }
-    
+
     /// 通过产品对象购买
     /// - Parameter product: 产品对象
-    /// - Throws: StoreKitError.purchaseInProgress 如果已有购买正在进行
-    public func purchase(_ product: Product) async throws {
+    public func purchase(_ product: Product) async {
         guard let service = service else {
-            throw StoreKitError.serviceNotStarted
+            currentState = .error("StoreKit2Manager.purchase","Service not started","服务未启动，请先调用 configure 方法")    
+            return
         }
-        try await service.purchase(product)
+        await service.purchase(product)
     }
     
     /// 恢复购买
-    /// - Throws: StoreKitError.restorePurchasesFailed 如果恢复失败
+    /// - Throws: StoreKit2Error.restorePurchasesFailed 如果恢复失败
     public func restorePurchases() async throws {
         try await service?.restorePurchases()
     }
@@ -454,7 +454,7 @@ public class StoreKit2Manager {
     }
     
     /// 显示优惠代码兑换界面（iOS 16.0+）
-    /// - Throws: StoreKitError 如果显示失败
+    /// - Throws: StoreKit2Error 如果显示失败
     /// - Note: 兑换后的交易会通过 Transaction.updates 发出
     @MainActor
     public func presentOfferCodeRedeemSheet() async -> Bool {
@@ -527,7 +527,7 @@ extension StoreKit2Manager: StoreKitServiceDelegate {
         validTransactions = validTrans
         
         // 通知代理
-        delegate?.storeKit(self, didUpdatePurchasedTransactions: validTrans, latests: latestTrans)
+        delegate?.storeKit(self, didUpdatePurchasedTransactions: validTrans, latestTrans: latestTrans)
         
         // 通知闭包回调
         onPurchasedTransactionsUpdated?(validTrans, latestTrans)

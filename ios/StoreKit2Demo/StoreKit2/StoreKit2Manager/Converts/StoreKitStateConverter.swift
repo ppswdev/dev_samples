@@ -22,12 +22,11 @@ public struct StoreKitStateConverter {
         case .idle:
             dict["type"] = "idle"
             
+        case .unfinishedCompelted:
+            dict["type"] = "unfinishedCompelted"
+            
         case .loadingProducts:
             dict["type"] = "loadingProducts"
-            
-//        case .productsLoaded(let products):
-//            dict["type"] = "productsLoaded"
-//            dict["products"] = ProductConverter.toDictionaryArray(products)
             
         case .loadingPurchases:
             dict["type"] = "loadingPurchases"
@@ -39,12 +38,12 @@ public struct StoreKitStateConverter {
             dict["type"] = "purchasing"
             dict["productId"] = productId
             
-        case .purchaseSuccess(let productId):
-            dict["type"] = "purchaseSuccess"
-            dict["productId"] = productId
-            
         case .purchasePending(let productId):
             dict["type"] = "purchasePending"
+            dict["productId"] = productId
+            
+        case .purchaseSuccess(let productId):
+            dict["type"] = "purchaseSuccess"
             dict["productId"] = productId
             
         case .purchaseCancelled(let productId):
@@ -55,10 +54,6 @@ public struct StoreKitStateConverter {
             dict["type"] = "purchaseFailed"
             dict["productId"] = productId
             dict["error"] = errorMessage
-            
-//        case .subscriptionStatusChanged(let renewalState):
-//            dict["type"] = "subscriptionStatusChanged"
-//            dict["renewalState"] = renewalStateToString(renewalState)
             
         case .restoringPurchases:
             dict["type"] = "restoringPurchases"
@@ -83,9 +78,12 @@ public struct StoreKitStateConverter {
             dict["productId"] = productId
             dict["isFreeTrialCancelled"] = isFreeTrialCancelled
             
-        case .error(let errorMessage):
+        case .error(let errorPosition, let errorDesc, let errorDetail):
             dict["type"] = "error"
-            dict["error"] = errorMessage
+            dict["errorPosition"] = errorPosition
+            dict["errorDesc"] = errorDesc
+            dict["errorDetail"] = errorDetail
+        
         }
         
         return dict

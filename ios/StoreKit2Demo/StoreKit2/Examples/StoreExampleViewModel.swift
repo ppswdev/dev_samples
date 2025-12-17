@@ -107,8 +107,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             
         case .purchaseFailed(let productId, let errorMessage):
             isLoading = false
-            errorMessage = "购买失败: \(productId)\n\(errorMessage)"
-            print("❌ 购买失败: \(errorMessage)")
+            print("❌ 购买失败: \(productId)， \(errorMessage)")
             
         case .restoringPurchases:
             isLoading = true
@@ -123,7 +122,6 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             
         case .restorePurchasesFailed(let errorMessage):
             isLoading = false
-            errorMessage = "恢复购买失败: \(errorMessage)"
             print("❌ 恢复购买失败: \(errorMessage)")
             
         case .purchaseRefunded(let productId):
@@ -138,16 +136,15 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
                 await refreshPurchases()
             }
             
-        case .subscriptionCancelled(let productId):
-            print("⚠️ 订阅已取消: \(productId)")
+        case .subscriptionCancelled(let productId, let isFreeTrialCancelled):
+            print("⚠️ 订阅已取消: \(productId), 是否是免费试用期取消：\(isFreeTrialCancelled)")
             Task {
                 await refreshPurchases()
             }
             
-        case .error(let errorMessage):
+        case .error(let errorPosition,let errorMessage,let errorDetail):
             isLoading = false
-            errorMessage = errorMessage
-            print("❌ 发生错误: \(errorMessage)")
+            print("❌ 发生错误: \(errorPosition),\(errorMessage),\(errorDetail)")
             
         default:
             break

@@ -12,6 +12,9 @@ import StoreKit
 public enum StoreKitState {
     /// 空闲状态
     case idle
+
+    /// 未完成任务已执行完成
+    case unfinishedCompelted
     
     /// 正在加载产品
     case loadingProducts
@@ -55,7 +58,7 @@ public enum StoreKitState {
     /// 订阅已取消，返回：产品ID, 是否在免费试用期内取消
     case subscriptionCancelled(String, isFreeTrialCancelled: Bool)
     
-    /// 发生错误，返回：错误描述
-    case error(String)
+    /// 发生错误，返回：触发位置，描述说明，错误对战详情
+    case error(String, String, String)
 }
 

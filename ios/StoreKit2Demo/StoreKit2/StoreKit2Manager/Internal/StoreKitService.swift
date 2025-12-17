@@ -16,7 +16,7 @@ import AppKit
 
 /// StoreKit 内部服务类
 /// 负责与 StoreKit API 交互，处理产品加载、购买、交易监听等核心功能
-internal class StoreKitService: ObservableObject {
+internal final class StoreKitService: ObservableObject,@unchecked Sendable {
     private let config: StoreKitConfig
     weak var delegate: StoreKitServiceDelegate?
     
@@ -97,7 +97,7 @@ internal class StoreKitService: ObservableObject {
         
         Task {
             await clearUnfinishedTransactions()
-            await loadProducts()
+            let _ = await loadProducts()
             await loadValidTransactions()
             
             // 初始检查订阅状态
@@ -138,7 +138,7 @@ internal class StoreKitService: ObservableObject {
             self.allProducts = products
             return products
         } catch {
-            currentState = .error(error.localizedDescription)
+            currentState = .error("loadProduct",error.localizedDescription, String(describing: error))
             return nil
         }
     }
@@ -194,37 +194,35 @@ internal class StoreKitService: ObservableObject {
             do {
                 // 使用统一的验证方法
                 let transaction = try verifyPurchase(result)
-                
                 // 验证成功，完成交易
                 await transaction.finish()
-                print("未完成交易，完成交易处理: \(transaction.productID)")
-                
+                currentState = .unfinishedCompelted
             } catch {
-                // 验证失败，记录错误但不完成交易
-                if case .unverified(let transaction, _) = result {
-                    print("未完成交易，交易验证失败，产品ID: \(transaction.productID) 错误\(error.localizedDescription)")
-                    
-                    // 更新状态
-                    currentState = .error(StoreKitError.verificationFailed.localizedDescription)
-                }
-                
-                // 注意：验证失败时不要调用 finish()
+                currentState = .error("clearUnfinishedTransactions", error.localizedDescription, String(describing: error))
             }
         }
     }
     
     /// 购买产品（带并发保护）
-    func purchase(_ product: Product) async throws {
+    func purchase(_ product: Product) async {
         // 并发购买保护
-        return try await withCheckedThrowingContinuation { continuation in
+        await withCheckedContinuation { continuation in
             purchasingQueue.async { [weak self] in
                 guard let self = self else {
-                    continuation.resume(throwing: StoreKitError.unknownError)
+                    // self 为 nil，设置错误状态
+                    Task { @MainActor in
+                        self?.currentState = .error("purchase", "service released", "服务已释放")
+                    }
+                    continuation.resume()
                     return
                 }
                 
                 guard !self.isPurchasing else {
-                    continuation.resume(throwing: StoreKitError.purchaseInProgress)
+                    // 购买正在进行中，设置错误状态
+                    Task { @MainActor in
+                        self.currentState = .error("purchase", "isPurchasing", "购买正在进行中，请等待当前购买完成")
+                    }
+                    continuation.resume()
                     return
                 }
                 
@@ -244,7 +242,7 @@ internal class StoreKitService: ObservableObject {
     }
     
     /// 执行购买
-    private func performPurchase(_ product: Product, continuation: CheckedContinuation<Void, Error>) async {
+    private func performPurchase(_ product: Product, continuation: CheckedContinuation<Void, Never>) async {
         await MainActor.run {
             currentState = .purchasing(product.id)
         }
@@ -256,7 +254,7 @@ internal class StoreKitService: ObservableObject {
             case .success(let verification):
                 do {
                     let transaction = try verifyPurchase(verification)
-                    
+                    // 打印产品详细信息
                     await printProductDetails(product)
                     // 打印详细的交易信息
                     await printTransactionDetails(transaction)
@@ -274,10 +272,12 @@ internal class StoreKitService: ObservableObject {
                     }
                     continuation.resume()
                 } catch {
+                    // 验证失败，通过状态返回错误
                     await MainActor.run {
+                        currentState = .error("performPurchase", error.localizedDescription, String(describing: error))
                         currentState = .purchaseFailed(product.id, error.localizedDescription)
                     }
-                    continuation.resume(throwing: error)
+                    continuation.resume()
                 }
                 
             case .pending:
@@ -293,23 +293,72 @@ internal class StoreKitService: ObservableObject {
                 continuation.resume()
                 
             @unknown default:
-                let error = StoreKitError.unknownError
+                // 未知状态，通过状态返回错误
                 await MainActor.run {
-                    currentState = .purchaseFailed(product.id, error.localizedDescription)
+                    currentState = .purchaseFailed(product.id, "Unknown purchase status")
                 }
-                continuation.resume(throwing: error)
+                continuation.resume()
             }
         } catch {
-            await MainActor.run {
-                currentState = .purchaseFailed(product.id, error.localizedDescription)
+            // 购买过程出错，通过状态返回错误
+            // 这里捕获的是 product.purchase() 抛出的错误
+            // 可能是：Product.PurchaseError、StoreKit.StoreKitError 或其他系统错误
+            
+            let errorMessage: String
+            let errorDetails: String
+            let errorLocation: String
+            
+            // 根据错误类型获取详细信息
+            if let purchaseError = error as? Product.PurchaseError {
+                // Product.PurchaseError 类型的错误
+                // case purchaseNotAllowed        // 购买不被允许
+                // case purchaseUnavailable       // 购买不可用
+                // case invalidOfferIdentifier    // 无效的优惠标识符
+                // case invalidOfferPrice         // 无效的优惠价格
+                // case invalidOfferSignature     // 无效的优惠签名
+                // case invalidProductIdentifier  // 无效的产品标识符
+                // case productUnavailable        // 产品不可用
+                // case ineligibleForOffer        // 不符合优惠条件
+                // case invalidNonce              // 无效的 nonce
+                // case invalidSignature           // 无效的签名
+                // case missingOfferSignature     // 缺少优惠签名
+                // case unknown                   // 未知错误
+                errorMessage = purchaseError.localizedDescription
+                errorDetails = "Product.PurchaseError: \(String(describing: purchaseError))"
+                errorLocation = "product.purchase"
+            } else if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *),
+                    let storeKitError = error as? StoreKit.StoreKitError {
+                // StoreKit.StoreKitError 类型的错误
+                // case networkError(URLError)
+                // case systemError(any Error)
+                // case userCancelled
+                // case notAvailableInStorefront
+                // case notEntitled
+                // case unknown
+                // case unsupported
+                errorMessage = storeKitError.localizedDescription
+                errorDetails = "StoreKit.StoreKitError: \(String(describing: storeKitError))"
+                errorLocation = "product.purchase"
+            } else {
+                // 其他类型的未知错误
+                errorMessage = error.localizedDescription
+                errorDetails = "Other error: \(type(of: error)), \(String(describing: error))"
+                errorLocation = "product.purchase"
             }
-            continuation.resume(throwing: error)
+            
+            await MainActor.run {
+                // 第一次通知：详细的错误信息（包含位置、描述、堆栈）
+                currentState = .error(errorLocation, errorMessage, errorDetails)
+                // 第二次通知：购买失败（包含产品ID和错误描述）
+                currentState = .purchaseFailed(product.id, errorMessage)
+            }
+            continuation.resume()
         }
     }
     
     /// 恢复购买
     @MainActor
-    func restorePurchases() async throws {
+    func restorePurchases() async {
         currentState = .restoringPurchases
         
         do {
@@ -321,8 +370,28 @@ internal class StoreKitService: ObservableObject {
             await loadValidTransactions()
             currentState = .restorePurchasesSuccess
         } catch {
-            currentState = .restorePurchasesFailed(error.localizedDescription)
-            throw StoreKitError.restorePurchasesFailed(error)
+            // 恢复购买失败，通过状态返回错误
+            // 这里捕获的是 AppStore.sync() 抛出的错误
+            // 可能是：StoreKit.StoreKitError（网络错误、系统错误等）
+            
+            let errorMessage: String
+            let errorDetails: String
+            
+            // 根据错误类型获取详细信息
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *),
+            let storeKitError = error as? StoreKit.StoreKitError {
+                // StoreKit.StoreKitError 类型的错误
+                errorMessage = storeKitError.localizedDescription
+                errorDetails = "StoreKit.StoreKitError: \(String(describing: storeKitError))"
+            } else {
+                // 其他类型的错误（系统错误、网络错误等）
+                errorMessage = error.localizedDescription
+                errorDetails = "\(type(of: error)): \(String(describing: error))"
+            }
+            
+            // 通过状态返回错误（不抛出异常）
+            currentState = .error("restorePurchases", errorMessage, errorDetails)
+            currentState = .restorePurchasesFailed(errorMessage)
         }
     }
     
@@ -335,7 +404,28 @@ internal class StoreKitService: ObservableObject {
              // 重新获取已购买产品（会更新订阅状态）
             await loadValidTransactions()
         } catch {
-            print("同步 App Store 状态失败: \(error)")
+            // 恢复购买失败，通过状态返回错误
+            // 这里捕获的是 AppStore.sync() 抛出的错误
+            // 可能是：StoreKit.StoreKitError（网络错误、系统错误等）
+            
+            let errorMessage: String
+            let errorDetails: String
+            
+            // 根据错误类型获取详细信息
+            if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *),
+            let storeKitError = error as? StoreKit.StoreKitError {
+                // StoreKit.StoreKitError 类型的错误
+                errorMessage = storeKitError.localizedDescription
+                errorDetails = "StoreKit.StoreKitError: \(String(describing: storeKitError))"
+            } else {
+                // 其他类型的错误（系统错误、网络错误等）
+                errorMessage = error.localizedDescription
+                errorDetails = "\(type(of: error)): \(String(describing: error))"
+            }
+            
+            // 通过状态返回错误（不抛出异常）
+            currentState = .error("refreshPurchasesSync", errorMessage, errorDetails)
+            currentState = .restorePurchasesFailed(errorMessage)
         }
     }
     
@@ -429,7 +519,7 @@ internal class StoreKitService: ObservableObject {
     private func verifyPurchase<T>(_ verificationResult: VerificationResult<T>) throws -> T {
         switch verificationResult {
         case .unverified(_, let error):
-            throw StoreKitError.verificationFailed
+            throw error
         case .verified(let result):
             return result
         }
@@ -885,7 +975,7 @@ extension StoreKitService{
     }
     
     /// 显示优惠代码兑换界面（iOS 16.0+）
-    /// - Throws: StoreKitError 如果显示失败
+    /// - Throws: StoreKit2Error 如果显示失败
     /// - Note: 兑换后的交易会通过 Transaction.updates 发出
     @MainActor
     @available(iOS 16.0, visionOS 1.0, *)
@@ -900,7 +990,8 @@ extension StoreKitService{
             .first
         
         guard let windowScene = windowScene else {
-            throw StoreKitError.unknownError
+            currentState = .error("presentOfferCodeRedeemSheet", "windowScene is nil", "windowScene is nil")
+            return;
         }
         
         do {
@@ -909,10 +1000,10 @@ extension StoreKitService{
             // 这里可以刷新购买列表以确保数据同步
             await loadValidTransactions()
         } catch {
-            throw StoreKitError.purchaseFailed(error)
+            currentState = .error("presentOfferCodeRedeemSheet", error.localizedDescription, String(describing: error))
         }
         #else
-        throw StoreKitError.unknownError
+        throw StoreKit2Error.unknownError
         #endif
     }
     
