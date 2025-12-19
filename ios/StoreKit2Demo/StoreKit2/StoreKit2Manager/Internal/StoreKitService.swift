@@ -138,7 +138,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
             self.allProducts = products
             return products
         } catch {
-            currentState = .error("loadProduct",error.localizedDescription, String(describing: error))
+            currentState = .error("StoreKitService.loadProduct",error.localizedDescription, String(describing: error))
             return nil
         }
     }
@@ -198,7 +198,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 await transaction.finish()
                 currentState = .unfinishedCompelted
             } catch {
-                currentState = .error("clearUnfinishedTransactions", error.localizedDescription, String(describing: error))
+                currentState = .error("StoreKitService.clearUnfinishedTransactions", error.localizedDescription, String(describing: error))
             }
         }
     }
@@ -211,7 +211,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 guard let self = self else {
                     // self 为 nil，设置错误状态
                     Task { @MainActor in
-                        self?.currentState = .error("purchase", "service released", "服务已释放")
+                        self?.currentState = .error("StoreKitService.purchase", "service released", "服务已释放")
                     }
                     continuation.resume()
                     return
@@ -220,7 +220,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 guard !self.isPurchasing else {
                     // 购买正在进行中，设置错误状态
                     Task { @MainActor in
-                        self.currentState = .error("purchase", "isPurchasing", "购买正在进行中，请等待当前购买完成")
+                        self.currentState = .error("StoreKitService.purchase", "isPurchasing", "购买正在进行中，请等待当前购买完成")
                     }
                     continuation.resume()
                     return
@@ -274,7 +274,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 } catch {
                     // 验证失败，通过状态返回错误
                     await MainActor.run {
-                        currentState = .error("performPurchase", error.localizedDescription, String(describing: error))
+                        currentState = .error("StoreKitService.performPurchase", error.localizedDescription, String(describing: error))
                         currentState = .purchaseFailed(product.id, error.localizedDescription)
                     }
                     continuation.resume()
@@ -295,6 +295,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
             @unknown default:
                 // 未知状态，通过状态返回错误
                 await MainActor.run {
+                    currentState = .error("StoreKitService.performPurchase", "Unknown purchase status", "Unknown purchase status")
                     currentState = .purchaseFailed(product.id, "Unknown purchase status")
                 }
                 continuation.resume()
@@ -325,7 +326,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 // case unknown                   // 未知错误
                 errorMessage = purchaseError.localizedDescription
                 errorDetails = "Product.PurchaseError: \(String(describing: purchaseError))"
-                errorLocation = "product.purchase"
+                errorLocation = "StoreKitService.product.purchase"
             } else if #available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *),
                     let storeKitError = error as? StoreKit.StoreKitError {
                 // StoreKit.StoreKitError 类型的错误
@@ -338,12 +339,12 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
                 // case unsupported
                 errorMessage = storeKitError.localizedDescription
                 errorDetails = "StoreKit.StoreKitError: \(String(describing: storeKitError))"
-                errorLocation = "product.purchase"
+                errorLocation = "StoreKitService.product.purchase"
             } else {
                 // 其他类型的未知错误
                 errorMessage = error.localizedDescription
                 errorDetails = "Other error: \(type(of: error)), \(String(describing: error))"
-                errorLocation = "product.purchase"
+                errorLocation = "StoreKitService.product.purchase"
             }
             
             await MainActor.run {
@@ -390,7 +391,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
             }
             
             // 通过状态返回错误（不抛出异常）
-            currentState = .error("restorePurchases", errorMessage, errorDetails)
+            currentState = .error("StoreKitService.restorePurchases", errorMessage, errorDetails)
             currentState = .restorePurchasesFailed(errorMessage)
         }
     }
@@ -424,7 +425,7 @@ internal final class StoreKitService: ObservableObject,@unchecked Sendable {
             }
             
             // 通过状态返回错误（不抛出异常）
-            currentState = .error("refreshPurchasesSync", errorMessage, errorDetails)
+            currentState = .error("StoreKitService.refreshPurchasesSync", errorMessage, errorDetails)
             currentState = .restorePurchasesFailed(errorMessage)
         }
     }
@@ -987,7 +988,7 @@ extension StoreKitService{
             .first
         
         guard let windowScene = windowScene else {
-            currentState = .error("presentOfferCodeRedeemSheet", "windowScene is nil", "windowScene is nil")
+            currentState = .error("StoreKitService.presentOfferCodeRedeemSheet", "windowScene is nil", "windowScene is nil")
             return;
         }
         
@@ -997,7 +998,7 @@ extension StoreKitService{
             // 这里可以刷新购买列表以确保数据同步
             await loadValidTransactions()
         } catch {
-            currentState = .error("presentOfferCodeRedeemSheet", error.localizedDescription, String(describing: error))
+            currentState = .error("StoreKitService.presentOfferCodeRedeemSheet", error.localizedDescription, String(describing: error))
         }
         #else
         throw StoreKit2Error.unknownError

@@ -254,12 +254,9 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     /// 购买产品
     func purchase(_ product: Product) {
         Task {
-            do {
-                try await StoreKit2Manager.shared.purchase(product)
-            } catch {
-                errorMessage = error.localizedDescription
-                print("❌ 购买失败2: \(error.localizedDescription)")
-            }
+            let isSubscribedButFreeTrailCancelled = await StoreKit2Manager.shared.isSubscribedButFreeTrailCancelled(productId: product.id)
+            print("\(product.id) => isSubscribedButFreeTrailCancelled \(isSubscribedButFreeTrailCancelled)")
+            await StoreKit2Manager.shared.purchase(product)
         }
     }
     
@@ -380,10 +377,15 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
     
     /// 显示优惠代码兑换界面（iOS 16.0+）
     func presentOfferCodeRedeemSheet() async {
-        let result =  await StoreKit2Manager.shared.presentOfferCodeRedeemSheet()
-        if(result){
-            await refreshPurchases()
+        if #available(iOS 16.0, *) {
+            let result =  await StoreKit2Manager.shared.presentOfferCodeRedeemSheet()
+            if(result){
+                await refreshPurchases()
+            }
+        } else {
+            // Fallback on earlier versions
         }
+       
     }
     
     // MARK: - 辅助方法
