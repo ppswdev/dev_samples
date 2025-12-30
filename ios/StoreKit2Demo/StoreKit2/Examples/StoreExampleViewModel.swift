@@ -11,7 +11,7 @@ import SwiftUI
 
 /// StoreKit2Manager 使用示例的 ViewModel
 @MainActor
-class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
+class StoreExampleViewModel: ObservableObject, @preconcurrency StoreKitDelegate {
     @Published var products: [Product] = []
     @Published var purchasedTransactions: [Transaction] = []
     @Published var latestTransactions: [Transaction] = []
@@ -91,7 +91,7 @@ class StoreExampleViewModel: ObservableObject, StoreKitDelegate {
             isLoading = true
             print("正在购买: \(productId)")
             
-        case .purchaseSuccess(let productId):
+        case .purchaseSuccess(let productId, let transaction):
             isLoading = false
             print("✅ 购买成功: \(productId)")
             Task {
